@@ -2,6 +2,7 @@ using Azure.Identity;
 using DlangezwaHS.Web.Data;
 using DlangezwaHS.Web.Models.Domain;
 using DlangezwaHS.Web.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -37,6 +38,14 @@ try
             builder.Configuration.GetConnectionString("DefaultConnection"),
             sql => sql.EnableRetryOnFailure(3)
         ));
+
+    // ─── Data Protection ──────────────────────────────────────────────────────
+    // Containers (e.g. Render) lose their file system on every restart, so keep the
+    // cookie/antiforgery encryption keys in the database. Otherwise each restart
+    // invalidates existing logins and any form opened before it.
+    builder.Services.AddDataProtection()
+        .SetApplicationName("DlangezwaHS")
+        .PersistKeysToDbContext<ApplicationDbContext>();
 
     // ─── Identity ─────────────────────────────────────────────────────────────
     builder.Services

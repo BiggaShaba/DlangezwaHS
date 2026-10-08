@@ -1,13 +1,18 @@
 ﻿using DlangezwaHS.Web.Models.Domain;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using static DlangezwaHS.Web.Models.Domain.QuestionPaper;
 
 namespace DlangezwaHS.Web.Data;
 
-public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
+public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IDataProtectionKeyContext
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+
+    // Keys that encrypt login cookies and form tokens — kept in the database so they
+    // survive container restarts (otherwise every redeploy logs everyone out)
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     // Academic
     public DbSet<Learner> Learners => Set<Learner>();
