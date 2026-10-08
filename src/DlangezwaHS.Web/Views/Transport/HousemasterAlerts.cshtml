@@ -1,0 +1,40 @@
+@model IList<HousemasterAlertRow>
+@{ ViewData["Title"] = "Housemaster Alerts"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-exclamation-triangle-fill me-2"></i>Housemaster Alerts</h2>
+    <p>Boarding learners not marked as boarded over the last 14 days.</p>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+                No missing-learner alerts. All boarding learners have been accounted for.
+            </div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Date</th><th>Bus</th><th>Missing Learners</th></tr></thead>
+                <tbody>
+                @foreach (var a in Model)
+                {
+                    <tr>
+                        <td>@a.Date.ToString("dddd, dd MMM yyyy")</td>
+                        <td>@a.BusReg</td>
+                        <td>
+                            @foreach (var name in a.MissingLearners)
+                            {
+                                <span class="badge badge-rejected rounded-pill me-1">@name</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

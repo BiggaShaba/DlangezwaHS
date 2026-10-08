@@ -1,0 +1,148 @@
+@model BoardingDashboardViewModel
+@{
+    ViewData["Title"] = "Boarding Dashboard";
+    var hour = DlangezwaHS.Web.Services.SchoolClock.Now.Hour;
+    var greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    var overdue = Model.CurrentlyOut.Count(r => r.IsLate);
+    var inNow = Math.Max(0, Model.TotalBoarders - Model.CurrentlyOut.Count);
+    string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-house-heart me-2"></i>@greeting</h2>
+        <p>@DlangezwaHS.Web.Services.SchoolClock.Today.ToString("dddd, d MMMM yyyy") · who's in, who's out, and what needs attention</p>
+    </div>
+    <a asp-action="Scanner" class="k-btn k-btn-accent"><i class="bi bi-qr-code-scan"></i>Open Scanner</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0">
+        <div class="k-stat">
+            <div class="k-stat-label"><i class="bi bi-people-fill"></i>Total boarders</div>
+            <div class="k-stat-value" data-count="@Model.TotalBoarders">@Model.TotalBoarders</div>
+            <div class="k-stat-note">@inNow in the boarding house now</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1">
+        <div class="k-stat lunch">
+            <div class="k-stat-label"><i class="bi bi-box-arrow-right"></i>Currently out</div>
+            <div class="k-stat-value" data-count="@Model.CurrentlyOut.Count">@Model.CurrentlyOut.Count</div>
+            <div class="k-stat-note">@(overdue > 0 ? $"{overdue} overdue" : "everyone on time")</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2">
+        <div class="k-stat breakfast">
+            <div class="k-stat-label"><i class="bi bi-envelope-paper"></i>Pending leave</div>
+            <div class="k-stat-value" data-count="@Model.PendingLeaveRequests">@Model.PendingLeaveRequests</div>
+            <div class="k-stat-note">@(Model.PendingLeaveRequests > 0 ? "waiting for your decision" : "nothing to review")</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3">
+        <div class="k-stat @(Model.LateTodayCount > 0 ? "danger" : "dinner")">
+            <div class="k-stat-label"><i class="bi bi-alarm"></i>Late today</div>
+            <div class="k-stat-value" data-count="@Model.LateTodayCount">@Model.LateTodayCount</div>
+            <div class="k-stat-note">late check-ins today</div>
+        </div>
+    </div>
+</div>
+
+<div class="k-section k-rise mt-0" style="--i:4">Quick actions</div>
+<div class="row g-3">
+    <div class="col-12 col-sm-6 col-xl-3 k-rise" style="--i:5">
+        <a class="k-tile primary" asp-action="Scanner">
+            <i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-qr-code-scan" aria-hidden="true"></i></span>
+            <div><h3>Check-In / Out</h3><div class="sub">Scan a boarding badge at the gate</div></div>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3 k-rise" style="--i:6">
+        <a class="k-tile" asp-action="LeaveRequests">
+            <i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-envelope-paper" aria-hidden="true"></i></span>
+            <div><h3>Leave Requests</h3><div class="sub">Approve or reject weekend and appointment leave</div></div>
+            @if (Model.PendingLeaveRequests > 0) { <span class="count" aria-label="@Model.PendingLeaveRequests pending">@Model.PendingLeaveRequests</span> }
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3 k-rise" style="--i:7">
+        <a class="k-tile" asp-action="DietaryProfiles">
+            <i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i></span>
+            <div><h3>Dietary Profiles</h3><div class="sub">Allergies and needs across the boarding house</div></div>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3 k-rise" style="--i:8">
+        <a class="k-tile" asp-action="MealComplianceReport">
+            <i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i></span>
+            <div><h3>Meal Compliance</h3><div class="sub">Attendance, waste, ratings and anomalies</div></div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-7 k-rise" style="--i:9">
+        <div class="k-card h-100">
+            <div class="k-card-head">
+                <div><h3 class="k-title">Currently out</h3><p class="k-sub">Overdue learners first</p></div>
+                <a asp-action="MovementLog" class="k-btn k-btn-ghost k-btn-sm"><i class="bi bi-list-ul"></i>Movement log</a>
+            </div>
+            @if (!Model.CurrentlyOut.Any())
+            {
+                <div class="k-empty"><i class="bi bi-house-check"></i><strong>Everyone is checked in</strong><p>Learners appear here when they're scanned out on approved leave.</p></div>
+            }
+            <div id="outList" data-more-list data-more-initial="5" data-more-step="5">
+                @foreach (var r in Model.CurrentlyOut)
+                {
+                    <div class="k-person" data-more-item>
+                        <span class="k-avatar @(r.IsLate ? "danger" : "")" aria-hidden="true">@Initials(r.LearnerName)</span>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="fw-bold" style="color:var(--dhs-navy)">@r.LearnerName</div>
+                            <div class="k-sub text-truncate">@(r.Destination ?? "No destination given") · out since @r.Since?.AddHours(2).ToString("ddd dd MMM HH:mm")</div>
+                        </div>
+                        @if (r.IsLate)
+                        {
+                            <span class="k-pill danger pulse text-nowrap"><i class="bi bi-alarm"></i>Overdue @(r.LateMinutes >= 120 ? $"{r.LateMinutes / 60} h" : $"{r.LateMinutes} min")</span>
+                        }
+                        else
+                        {
+                            <span class="k-pill ok text-nowrap"><i class="bi bi-check2"></i>On time</span>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="outList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+        </div>
+    </div>
+
+    <div class="col-lg-5 k-rise" style="--i:10">
+        <div class="k-card h-100">
+            <div class="k-card-head">
+                <div><h3 class="k-title">Meal absence alerts</h3><p class="k-sub">Learners who missed 3 meals in a row</p></div>
+                @if (Model.MealAbsenceAlerts.Any()) { <span class="k-pill danger">@Model.MealAbsenceAlerts.Count open</span> }
+            </div>
+            @if (!Model.MealAbsenceAlerts.Any())
+            {
+                <div class="k-empty"><i class="bi bi-emoji-smile"></i><strong>No meal absence alerts</strong><p>You'll be emailed as soon as a learner misses three meals in a row.</p></div>
+            }
+            <div id="alertList" data-more-list data-more-initial="5" data-more-step="5">
+                @foreach (var a in Model.MealAbsenceAlerts)
+                {
+                    <div class="k-person" data-more-item>
+                        <span class="k-avatar danger" aria-hidden="true">@Initials(a.LearnerName)</span>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="fw-bold" style="color:var(--dhs-navy)">@a.LearnerName</div>
+                            <div class="k-sub">Missed @a.ConsecutiveMissedMeals meals · alerted @a.AlertSentAt.AddHours(2).ToString("dd MMM HH:mm")</div>
+                        </div>
+                        <form method="post" asp-action="ResolveMealAbsenceAlert" class="m-0" data-busy>
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@a.Id" />
+                            <button type="submit" class="k-btn k-btn-ghost k-btn-sm" title="Mark as followed up" data-busy-text="Saving…"><i class="bi bi-check2"></i>Followed up</button>
+                        </form>
+                    </div>
+                }
+            </div>
+            <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="alertList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+        </div>
+    </div>
+</div>

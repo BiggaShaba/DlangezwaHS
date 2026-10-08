@@ -1,0 +1,62 @@
+@model TransportDashboardViewModel
+@{ ViewData["Title"] = "Transport"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-bus-front me-2"></i>Transport</h2></div>
+    @if (Model.IsAdmin)
+    {
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-action="ScheduleTransport" class="btn btn-dhs-primary"><i class="bi bi-plus-circle me-1"></i>Schedule Transport</a>
+            <a asp-action="Buses" class="btn btn-dhs-secondary"><i class="bi bi-bus-front me-1"></i>Buses</a>
+            <a asp-action="Drivers" class="btn btn-dhs-secondary"><i class="bi bi-person-badge me-1"></i>Drivers</a>
+            <a asp-action="FuelRecords" class="btn btn-dhs-secondary"><i class="bi bi-fuel-pump me-1"></i>Fuel</a>
+        </div>
+    }
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Buses</div><div class="fs-3 fw-bold">@Model.TotalBuses</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Drivers</div><div class="fs-3 fw-bold">@Model.TotalDrivers</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Licenses Expiring Soon</div><div class="fs-3 fw-bold text-danger">@Model.ExpiringLicenses</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Scheduled Trips</div><div class="fs-3 fw-bold">@Model.UpcomingTrips.Count</div></div></div></div>
+</div>
+
+@if (Model.IsHousemaster)
+{
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-exclamation-triangle-fill me-2"></i>You are a Housemaster. Check missing-learner alerts for recent trips.</span>
+        <a asp-action="HousemasterAlerts" class="btn btn-sm btn-outline-dark">View Alerts</a>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-signpost-split me-2"></i>Scheduled Transport</h5>
+        <a asp-action="Trips" class="btn btn-sm btn-outline-secondary">View All</a>
+    </div>
+    <div class="card-body p-0">
+        @if (!Model.UpcomingTrips.Any())
+        {
+            <div class="p-4 text-center text-muted">No transport scheduled yet.</div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Route</th><th>Purpose</th><th>Bus</th><th>Driver</th><th>Departs</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model.UpcomingTrips)
+                {
+                    <tr>
+                        <td>@t.Route</td>
+                        <td>@t.Purpose @(!string.IsNullOrEmpty(t.PurposeDetail) ? $"– {t.PurposeDetail}" : "")</td>
+                        <td>@t.Bus?.RegistrationNumber</td>
+                        <td>@t.Driver?.FullName</td>
+                        <td><small>@(t.IsRecurring ? t.DaysOfWeek : t.TripDate?.ToString("dd MMM yyyy")) · @t.DepartureTime.ToString(@"hh\:mm")</small></td>
+                        <td><a asp-action="BoardTheBus" asp-route-tripId="@t.Id" class="btn btn-sm btn-dhs-primary">Board</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

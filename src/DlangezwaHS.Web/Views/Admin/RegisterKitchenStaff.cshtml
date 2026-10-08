@@ -1,0 +1,66 @@
+@model RegisterKitchenStaffViewModel
+@{ ViewData["Title"] = "Register Kitchen Staff"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="KitchenStaff">Kitchen Staff</a></li>
+        <li class="breadcrumb-item active">Register</li>
+    </ol></nav>
+    <h2><i class="bi bi-person-plus me-2"></i>Register New Kitchen Staff</h2>
+    <p>System will generate login credentials and email them to the staff member.</p>
+</div>
+
+<div class="row justify-content-center">
+<div class="col-lg-8">
+<div class="card">
+    <div class="card-body p-4">
+        <form asp-action="RegisterKitchenStaff" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="Id" />
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+            <h5 class="fw-bold mb-3" style="color:#0B2A4A;"><i class="bi bi-person me-2"></i>Staff Details</h5>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label asp-for="FirstName" class="form-label">First Name <span class="text-danger">*</span></label>
+                    <input asp-for="FirstName" class="form-control" placeholder="First name" />
+                    <span asp-validation-for="FirstName" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="LastName" class="form-label">Surname <span class="text-danger">*</span></label>
+                    <input asp-for="LastName" class="form-control" placeholder="Surname" />
+                    <span asp-validation-for="LastName" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Email" class="form-label">Email Address <span class="text-danger">*</span></label>
+                    <input asp-for="Email" class="form-control" type="email" placeholder="kitchen@school.edu.za" readonly="@(Model.Id.HasValue)" />
+                    <span asp-validation-for="Email" class="text-danger small"></span>
+                    <div class="form-text">Login credentials will be sent to this address.</div>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Phone" class="form-label">Phone</label>
+                    <input asp-for="Phone" class="form-control" placeholder="0xx xxx xxxx" />
+                </div>
+            </div>
+
+            <div class="alert alert-info small mt-3 py-2">
+                <i class="bi bi-info-circle me-1"></i>
+                The staff member will receive an email with their email address and a generated temporary password.
+                They can log in at <strong>/Account/Login</strong>.
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-dhs-primary px-4">
+                    <i class="bi bi-envelope me-1"></i>@(Model.Id.HasValue ? "Save Changes" : "Register & Send Credentials")
+                </button>
+                <a asp-action="KitchenStaff" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>
+
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+}

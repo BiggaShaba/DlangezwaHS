@@ -1,0 +1,48 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model FuelRecordCreateViewModel
+@{ ViewData["Title"] = "Add Fuel Record"; }
+
+<div class="row justify-content-center">
+<div class="col-md-6">
+<div class="page-header"><h2><i class="bi bi-fuel-pump me-2"></i>Add Fuel Record</h2></div>
+<div class="card">
+    <div class="card-body p-4">
+        <form asp-action="FuelRecordCreate" method="post">
+            @Html.AntiForgeryToken()
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+            <div class="mb-3">
+                <label asp-for="BusId" class="form-label">Bus <span class="text-danger">*</span></label>
+                <select asp-for="BusId" asp-items="@(new SelectList(Model.Buses, "Id", "RegistrationNumber"))" class="form-select">
+                    <option value="">Select bus…</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Date" class="form-label">Date of Refuel</label>
+                <input asp-for="Date" type="date" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label asp-for="Litres" class="form-label">Fuel Amount (litres)</label>
+                <input asp-for="Litres" type="number" step="0.01" min="0" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label asp-for="TotalCost" class="form-label">Total Cost (R)</label>
+                <input asp-for="TotalCost" type="number" step="0.01" min="0" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label asp-for="OdometerReading" class="form-label">Current Odometer Reading (km)</label>
+                <input asp-for="OdometerReading" type="number" min="0" class="form-control" />
+            </div>
+            <div class="mb-4">
+                <label asp-for="StationName" class="form-label">Petrol Station Name</label>
+                <input asp-for="StationName" class="form-control" />
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-dhs-primary px-4"><i class="bi bi-check me-1"></i>Save</button>
+                <a asp-action="FuelRecords" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

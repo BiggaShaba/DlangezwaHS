@@ -1,0 +1,206 @@
+@model CaptureMarksViewModel
+@{ ViewData["Title"] = "Capture Marks"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Assessments">Assessments</a></li>
+        <li class="breadcrumb-item active">Marks</li>
+    </ol></nav>
+    <h2><i class="bi bi-pencil-square me-2"></i>Capture Marks</h2>
+    <p>@Model.AssessmentName — @Model.ClassName — @Model.SubjectName — @Model.Term</p>
+</div>
+
+@if (Model.IsLocked)
+{
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+        <i class="bi bi-lock-fill fs-5"></i>
+        <div>These marks have been submitted and are <strong>locked</strong>. Only Admin can make changes.</div>
+    </div>
+}
+
+<!-- Summary bar -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon navy"><i class="bi bi-people"></i></div>
+            <div><div class="stat-value">@Model.Marks.Count</div><div class="stat-label">Learners</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-123"></i></div>
+            <div><div class="stat-value">@Model.TotalMarks</div><div class="stat-label">Total Marks</div></div>
+        </div>
+    </div>
+    @{
+        var entered   = Model.Marks.Count(m => m.MarksObtained.HasValue);
+        var classAvg  = entered > 0 ? Math.Round(Model.Marks.Where(m => m.MarksObtained.HasValue).Average(m => m.Percentage), 1) : 0;
+    }
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-check-circle"></i></div>
+            <div><div class="stat-value">@entered</div><div class="stat-label">Marks Entered</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon purple"><i class="bi bi-bar-chart"></i></div>
+            <div><div class="stat-value">@classAvg%</div><div class="stat-label">Class Avg</div></div>
+        </div>
+    </div>
+</div>
+
+<form asp-action="CaptureMarks" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="AssessmentId" />
+    <input type="hidden" asp-for="AssessmentName" />
+    <input type="hidden" asp-for="ClassName" />
+    <input type="hidden" asp-for="SubjectName" />
+    <input type="hidden" asp-for="TotalMarks" />
+    <input type="hidden" asp-for="Term" />
+    <input type="hidden" asp-for="IsLocked" />
+
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-dhs mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Learner</th>
+                        <th style="width:160px;">Marks / @Model.TotalMarks</th>
+                        <th style="width:100px;">%</th>
+                        <th style="width:70px;">Grade</th>
+                        <th style="width:80px;">Result</th>
+                        <th>Comments</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @for (int i = 0; i < Model.Marks.Count; i++)
+                {
+                    var row = Model.Marks[i];
+                    var pct = row.Percentage;
+                    var gradeCss = row.Grade switch {
+                        "A" => "text-success fw-bold",
+                        "B" => "text-success",
+                        "C" or "D" => "text-primary",
+                        "E" or "F" => "text-warning",
+                        _ => "text-danger"
+                    };
+                    <tr>
+                        <td class="text-muted small">@(i + 1)</td>
+                        <td>
+                            <strong>@row.FullName</strong>
+                            <input type="hidden" name="Marks[@i].LearnerId" value="@row.LearnerId" />
+                            <input type="hidden" name="Marks[@i].FullName"  value="@row.FullName"  />
+                            <input type="hidden" name="Marks[@i].IsLocked"  value="@row.IsLocked"  />
+                        </td>
+                        <td>
+                            @if (Model.IsLocked || row.IsLocked)
+                            {
+                                <span class="fw-semibold">@row.MarksObtained</span>
+                                <input type="hidden" name="Marks[@i].MarksObtained" value="@row.MarksObtained" />
+                            }
+                            else
+                            {
+                                <input type="number" name="Marks[@i].MarksObtained"
+                                       value="@row.MarksObtained"
+                                       class="form-control form-control-sm mark-input"
+                                       min="0" max="@Model.TotalMarks" step="0.5"
+                                       data-total="@Model.TotalMarks"
+                                       data-index="@i"
+                                       placeholder="—" />
+                            }
+                        </td>
+                        <td>
+                            <span id="pct_@i" class="@gradeCss">
+                                @(pct > 0 ? $"{pct}%" : "—")
+                            </span>
+                        </td>
+                        <td><span id="grade_@i" class="@gradeCss">@(string.IsNullOrEmpty(row.Grade) ? "—" : row.Grade)</span></td>
+                        <td>
+                            @if (row.MarksObtained.HasValue)
+                            {
+                                <span class="badge rounded-pill @(row.IsPassed ? "badge-approved" : "badge-rejected")">
+                                    @(row.IsPassed ? "Pass" : "Fail")
+                                </span>
+                            }
+                            else { <span class="text-muted">—</span> }
+                        </td>
+                        <td>
+                            <input type="text" name="Marks[@i].Comments"
+                                   value="@row.Comments"
+                                   class="form-control form-control-sm"
+                                   placeholder="Optional…"
+                                   @(Model.IsLocked ? "readonly" : "") />
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!Model.IsLocked)
+        {
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <a asp-action="Assessments" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>Back
+                </a>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-dhs-secondary px-4">
+                        <i class="bi bi-save me-1"></i>Save Draft
+                    </button>
+                    <button type="button" class="btn btn-dhs-primary px-4"
+                            data-confirm="Submit and LOCK these marks? You will not be able to edit them after submission."
+                            onclick="submitMarks()">
+                        <i class="bi bi-lock me-1"></i>Submit &amp; Lock
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+</form>
+
+<!-- Separate form for lock -->
+<form id="lock-form" asp-action="SubmitMarks" method="post" style="display:none;">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="assessmentId" value="@Model.AssessmentId" />
+</form>
+
+@section Scripts {
+<script>
+// Live grade calculation
+document.querySelectorAll('.mark-input').forEach(input => {
+    input.addEventListener('input', function() {
+        const i     = this.dataset.index;
+        const total = parseFloat(this.dataset.total);
+        const val   = parseFloat(this.value);
+        const pctEl  = document.getElementById('pct_' + i);
+        const gradeEl = document.getElementById('grade_' + i);
+        if (isNaN(val) || isNaN(total) || total === 0) {
+            pctEl.textContent  = '—';
+            gradeEl.textContent = '—';
+            return;
+        }
+        const pct = Math.round(val / total * 100 * 10) / 10;
+        pctEl.textContent  = pct + '%';
+        gradeEl.textContent = calcGrade(pct);
+    });
+});
+
+function calcGrade(pct) {
+    if (pct >= 80) return 'A';
+    if (pct >= 70) return 'B';
+    if (pct >= 60) return 'C';
+    if (pct >= 50) return 'D';
+    if (pct >= 40) return 'E';
+    if (pct >= 30) return 'F';
+    return 'G';
+}
+
+function submitMarks() {
+    if (confirm('Submit and LOCK these marks? You will not be able to edit them after submission.')) {
+        document.getElementById('lock-form').submit();
+    }
+}
+</script>
+}

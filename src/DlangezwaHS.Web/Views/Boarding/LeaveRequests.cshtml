@@ -1,0 +1,183 @@
+@model IList<LeaveRequestRow>
+@{
+    ViewData["Title"] = "Leave Requests";
+    bool showAll = (bool)(ViewBag.ShowAll ?? false);
+    var all = ViewBag.AllRequests as IList<LeaveRequestRow> ?? Model;
+    var today = DlangezwaHS.Web.Services.SchoolClock.Today;
+    var pending = all.Count(r => r.Status == "PendingHousemaster");
+    var approved = all.Count(r => r.Status == "Approved");
+    var rejected = all.Count(r => r.Status == "Rejected");
+    var awayToday = all.Count(r => r.Status == "Approved" && r.DepartureDate.Date <= today && r.ExpectedReturnDate.Date >= today);
+    var rows = Model.OrderBy(r => r.Status == "PendingHousemaster" ? 0 : 1).ThenBy(r => r.Status == "PendingHousemaster" ? r.DepartureDate : DateTime.MaxValue).ThenByDescending(r => r.CreatedAt).ToList();
+    string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    string StatusLabel(string s) => s == "PendingHousemaster" ? "Pending" : s;
+}
+
+<style>
+    .lr-card { border-radius: 20px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1rem 1.15rem; margin-bottom: .75rem;
+        transition: transform .3s var(--ease-spring), box-shadow .3s var(--ease-spring), border-color .2s; }
+    .lr-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    .lr-card.pending { border-left: 4px solid #f59e0b; }
+    .lr-trip { display: flex; align-items: center; gap: .6rem; padding: .55rem .8rem; border-radius: 14px; background: var(--dhs-light); font-size: .86rem; color: var(--dhs-navy); }
+    .lr-trip .arrow { color: var(--dhs-blue-dark); }
+    .lr-tabs { display: inline-flex; padding: 4px; border-radius: 14px; background: rgba(255,255,255,.14); gap: 4px; }
+    .lr-tabs a { padding: .45rem 1rem; border-radius: 10px; color: rgba(255,255,255,.85); font-weight: 600; text-decoration: none; font-size: .9rem; transition: background .2s, color .2s; }
+    .lr-tabs a:hover { color: #fff; background: rgba(255,255,255,.12); }
+    .lr-tabs a.active { background: #fff; color: var(--dhs-navy); }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-envelope-paper me-2"></i>Leave Requests</h2>
+        <p>Approve or reject leave that parents request — an approved request lets the learner check out on the departure day</p>
+    </div>
+    <nav class="lr-tabs" aria-label="Show">
+        <a asp-action="LeaveRequests" asp-route-showAll="false" class="@(showAll ? "" : "active")" aria-current="@(showAll ? null : "page")">Pending @if (pending > 0) { <span class="badge rounded-pill bg-warning text-dark ms-1">@pending</span> }</a>
+        <a asp-action="LeaveRequests" asp-route-showAll="true" class="@(showAll ? "active" : "")" aria-current="@(showAll ? "page" : null)">All requests</a>
+    </nav>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-hourglass-split"></i>Pending</div><div class="k-stat-value" data-count="@pending">@pending</div><div class="k-stat-note">waiting for a decision</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Approved</div><div class="k-stat-value" data-count="@approved">@approved</div><div class="k-stat-note">all time</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-x-circle"></i>Rejected</div><div class="k-stat-value" data-count="@rejected">@rejected</div><div class="k-stat-note">all time</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-geo-alt"></i>On leave today</div><div class="k-stat-value" data-count="@awayToday">@awayToday</div><div class="k-stat-note">approved for today</div></div></div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 k-rise" style="--i:4">
+    <div class="k-section m-0">@(showAll ? "All requests · newest first" : "Waiting for you · soonest departure first")</div>
+    @if (Model.Any())
+    {
+        <input type="search" id="leaveSearch" class="form-control k-input" style="max-width:240px" placeholder="Search learner or place…" aria-label="Search leave requests" />
+    }
+</div>
+
+@if (!Model.Any())
+{
+    <div class="k-empty k-rise" style="--i:5">
+        <i class="bi bi-inbox"></i>
+        <strong>@(showAll ? "No leave requests yet" : "No requests waiting")</strong>
+        <p>@(showAll ? "Requests appear here when parents submit them." : "You're all caught up — new requests appear here and on your dashboard.")</p>
+    </div>
+}
+
+<div id="leaveList" data-more-list data-more-initial="8" data-more-step="5">
+    @foreach (var r in rows)
+    {
+        var isPending = r.Status == "PendingHousemaster";
+        var nights = Math.Max(0, (r.ExpectedReturnDate.Date - r.DepartureDate.Date).Days);
+        var pill = r.Status switch { "Approved" => "ok", "Rejected" => "danger", _ => "warn" };
+        <div class="lr-card @(isPending ? "pending" : "")" data-more-item data-search="@((r.LearnerName + " " + r.ParentName + " " + r.Destination + " " + r.Purpose).ToLowerInvariant())">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <span class="k-avatar" aria-hidden="true">@Initials(r.LearnerName)</span>
+                <div class="flex-grow-1 min-w-0">
+                    <div class="fw-bold" style="color:var(--dhs-navy);font-size:1.02rem">@r.LearnerName</div>
+                    <div class="k-sub">Requested by @r.ParentName · @r.CreatedAt.AddHours(2).ToString("dd MMM HH:mm")</div>
+                </div>
+                <span class="k-pill @pill">@StatusLabel(r.Status)</span>
+            </div>
+            <div class="row g-2 mt-2 align-items-center">
+                <div class="col-md-7">
+                    <div class="lr-trip">
+                        <i class="bi bi-calendar-event"></i>
+                        <strong>@r.DepartureDate.ToString("ddd dd MMM")</strong>
+                        <i class="bi bi-arrow-right arrow"></i>
+                        <strong>@r.ExpectedReturnDate.ToString("ddd dd MMM")</strong>
+                        <span class="k-sub ms-auto">@(nights == 0 ? "same day" : $"{nights} night(s)")</span>
+                    </div>
+                </div>
+                <div class="col-md-5"><div class="k-sub"><i class="bi bi-geo-alt me-1"></i><strong style="color:var(--dhs-navy)">@r.Destination</strong> — @r.Purpose</div></div>
+            </div>
+            @if (isPending)
+            {
+                <div class="d-flex gap-2 mt-3 justify-content-end flex-wrap">
+                    <button type="button" class="k-btn k-btn-danger k-btn-sm" data-decide="reject" data-id="@r.Id" data-name="@r.LearnerName"><i class="bi bi-x-lg"></i>Reject</button>
+                    <button type="button" class="k-btn k-btn-primary k-btn-sm" data-decide="approve" data-id="@r.Id" data-name="@r.LearnerName"><i class="bi bi-check-lg"></i>Approve</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+<div class="k-sub text-center mt-2" id="noLeaveMatch" hidden>No requests match your search.</div>
+<div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="leaveList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+
+<!-- Approve / reject pop-ups -->
+<div class="modal fade k-modal" id="approveModal" tabindex="-1" aria-labelledby="approveTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" asp-action="ApproveLeaveRequest" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" />
+                <div class="k-modal-head">
+                    <span class="k-bubble b1"></span><span class="k-bubble b2"></span><span class="k-bubble b3"></span>
+                    <h5 id="approveTitle">Approve leave</h5>
+                    <p data-name></p>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="k-label" for="approveNotes">Note to the parent <span class="text-lowercase fw-normal">(optional)</span></label>
+                    <textarea id="approveNotes" name="notes" class="form-control k-input" rows="2" maxlength="500" placeholder="e.g. Please return by 17:00 on Sunday"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="k-btn k-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="k-btn k-btn-primary" data-busy-text="Approving…"><i class="bi bi-check-lg"></i>Approve</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade k-modal" id="rejectModal" tabindex="-1" aria-labelledby="rejectTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" asp-action="RejectLeaveRequest" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" />
+                <div class="k-modal-head">
+                    <span class="k-bubble b1"></span><span class="k-bubble b2"></span><span class="k-bubble b3"></span>
+                    <h5 id="rejectTitle">Reject leave</h5>
+                    <p data-name></p>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="k-label" for="rejectReason">Reason (sent to the parent)</label>
+                    <textarea id="rejectReason" name="reason" class="form-control k-input" rows="3" maxlength="500" required placeholder="e.g. Exams that weekend — please choose another date"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="k-btn k-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="k-btn k-btn-danger" data-busy-text="Rejecting…"><i class="bi bi-x-lg"></i>Reject</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    document.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => {
+        const modal = document.getElementById(b.dataset.decide === 'approve' ? 'approveModal' : 'rejectModal');
+        modal.querySelector('input[name=id]').value = b.dataset.id;
+        modal.querySelector('[data-name]').textContent = b.dataset.name;
+        modal.querySelector('textarea').value = '';
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }));
+    ['approveModal', 'rejectModal'].forEach(id => document.getElementById(id)
+        .addEventListener('shown.bs.modal', e => e.target.querySelector('textarea').focus()));
+
+    const search = document.getElementById('leaveSearch');
+    search?.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#leaveList [data-more-item]').forEach(row => {
+            const match = !q || row.dataset.search.includes(q);
+            row.toggleAttribute('data-filtered-out', !match);
+            row.hidden = !match;
+            if (q && match) { row.classList.remove('k-more-hidden'); shown++; }
+        });
+        document.getElementById('noLeaveMatch').hidden = !q || shown > 0;
+        if (!q) window.kInitMore(document);
+        else document.querySelector('[data-more-btn="leaveList"]').hidden = true;
+    });
+})();
+</script>
+}

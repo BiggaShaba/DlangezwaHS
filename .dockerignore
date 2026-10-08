@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/logs/
+**/.vs/
+**/*.user
+**/wwwroot/uploads/
+**/wwwroot/proofs/
+**/wwwroot/reports/
+**/App_Data/
+tests/
+.git/

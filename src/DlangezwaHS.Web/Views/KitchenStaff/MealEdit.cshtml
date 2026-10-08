@@ -1,0 +1,33 @@
+@model MealEditViewModel
+@{ ViewData["Title"] = "Edit Meal"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Meals">Meal Library</a></li>
+        <li class="breadcrumb-item active">Edit</li>
+    </ol></nav>
+    <h2><i class="bi bi-pencil me-2"></i>@Model.Name</h2>
+    <p>Changes also update this meal on any meal plans that already use it.</p>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-body">
+                <form asp-action="SaveMeal" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <partial name="_MealForm" model="Model" />
+                    <div class="d-flex gap-2 mt-3">
+                        <button type="submit" class="btn btn-dhs-primary"><i class="bi bi-save me-1"></i>Save Changes</button>
+                        <a asp-action="Meals" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

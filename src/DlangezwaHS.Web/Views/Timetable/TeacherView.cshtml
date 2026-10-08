@@ -1,0 +1,180 @@
+@model TeacherDayVm
+@using DlangezwaHS.Web.Services
+@{
+    ViewData["Title"] = "My Timetable";
+    var days    = new[] { (1,"Monday"), (2,"Tuesday"), (3,"Wednesday"), (4,"Thursday"), (5,"Friday") };
+    var terms   = ViewBag.Terms as string[] ?? Array.Empty<string>();
+    var selTerm = (string)(ViewBag.SelectedTerm ?? "Term 1");
+    var selYear = (int)(ViewBag.SelectedYear ?? DateTime.UtcNow.Year);
+
+    // Build lookup: day -> period -> slot
+    var slotMap = Model.Slots.ToDictionary(s => $"{s.Day}_{s.PeriodNumber}");
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-calendar3-week me-2 text-primary"></i>My Timetable</h2>
+        <small class="text-muted">@Model.Teacher.FullName — @selTerm @selYear</small>
+    </div>
+    <a asp-controller="Timetable" asp-action="DownloadTeacherPdf"
+       asp-route-term="@selTerm" asp-route-year="@selYear"
+       class="btn btn-outline-primary" target="_blank">
+        <i class="bi bi-file-earmark-pdf me-2"></i>Download PDF
+    </a>
+</div>
+
+<!-- Term / Year selector -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form method="get" asp-action="TeacherView" class="row g-2 align-items-end">
+            <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Term</label>
+                <select name="term" class="form-select form-select-sm" onchange="this.form.submit()">
+                    @foreach (var t in terms)
+                    { <option value="@t" selected="@(selTerm == t)">@t</option> }
+                </select>
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Year</label>
+                <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+                    @foreach (var y in Enumerable.Range(DateTime.UtcNow.Year - 1, 3))
+                    { <option value="@y" selected="@(selYear == y)">@y</option> }
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (!Model.Slots.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        No timetable has been set up for @selTerm @selYear yet. Contact Admin.
+    </div>
+}
+else
+{
+    <!-- Summary cards -->
+    <div class="row g-3 mb-4">
+        @foreach (var (d, dName) in days)
+        {
+            var daySlots = Model.Slots.Where(s => s.Day == d).OrderBy(s => s.PeriodNumber).ToList();
+            <div class="col-sm-6 col-lg">
+                <div class="card h-100">
+                    <div class="card-header py-2" style="background:var(--dhs-navy); color:#fff;">
+                        <h6 class="mb-0"><i class="bi bi-calendar-day me-1"></i>@dName</h6>
+                    </div>
+                    <div class="card-body p-2">
+                        @if (!daySlots.Any())
+                        {
+                            <p class="text-muted small mb-0 py-2 text-center">Free day</p>
+                        }
+                        else
+                        {
+                            @foreach (var slot in daySlots)
+                            {
+                                var period = SchoolDay.Periods.FirstOrDefault(p => p.Number == slot.PeriodNumber);
+                                var color  = Model.SubjectColors.TryGetValue(slot.SubjectId, out var c) ? c : "#5ea8d3";
+                                <div class="d-flex gap-2 align-items-start mb-2 p-2 rounded-2"
+                                     style="background:color20; border-left:4px solid @color;">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-semibold small">@slot.Subject?.Name</div>
+                                        <div class="text-muted" style="font-size:.72rem;">
+                                            P@(slot.PeriodNumber) · @period?.Start – @period?.End
+                                        </div>
+                                        <div class="text-muted" style="font-size:.72rem;">
+                                            <i class="bi bi-mortarboard me-1"></i>@slot.Class?.DisplayName
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Full grid view -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-table me-2"></i>Weekly Overview</h5>
+        </div>
+        <div class="card-body p-0" style="overflow-x:auto;">
+            <table class="table table-bordered table-sm mb-0 align-middle text-center" style="min-width:640px;">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width:110px;">Period</th>
+                        @foreach (var (_, dName) in days) { <th>@dName</th> }
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Assembly -->
+                    <tr style="background:#e8f0fe;">
+                        <td class="text-start ps-2" style="font-size:.75rem; color:#1a56db; font-weight:600;">
+                            <i class="bi bi-megaphone me-1"></i>08:30–09:00
+                        </td>
+                        @foreach (var (d, _) in days)
+                        {
+                            <td style="font-size:.75rem; color:#1a56db;">
+                                @if (d == 1 || d == 5) { <span>Assembly</span> }
+                            </td>
+                        }
+                    </tr>
+
+                    @foreach (var period in SchoolDay.Periods)
+                    {
+                        var breakBefore = SchoolDay.Breaks.FirstOrDefault(b => b.AfterPeriod == period.Number - 1);
+                        @if (breakBefore != null)
+                        {
+                            <tr style="background:#fef9e7;">
+                                <td colspan="6" class="text-center" style="font-size:.73rem; color:#b7791f; font-weight:600; padding:.25rem;">
+                                    <i class="bi bi-cup-hot me-1"></i>@breakBefore.Label — @breakBefore.Start–@breakBefore.End (15 min)
+                                </td>
+                            </tr>
+                        }
+                        <tr>
+                            <td class="text-start ps-2">
+                                <div class="fw-semibold" style="font-size:.78rem;">@period.Label</div>
+                                <div class="text-muted" style="font-size:.7rem;">@period.Start – @period.End</div>
+                            </td>
+                            @foreach (var (d, _) in days)
+                            {
+                                var key  = $"{d}_{period.Number}";
+                                var available = SchoolDay.IsPeriodAvailable(period.Number, d);
+                                @if (!available)
+                                {
+                                    <td style="background:#f8fafc; color:#94a3b8; font-size:.7rem;">—</td>
+                                }
+                                else if (slotMap.TryGetValue(key, out var slot))
+                                {
+                                    var color = Model.SubjectColors.TryGetValue(slot.SubjectId, out var c) ? c : "#5ea8d3";
+                                    <td style="background:@color; padding:0;">
+                                        <div style="padding:.35rem .4rem; color:@(IsColorDark(color)?"#fff":"#000");">
+                                            <div class="fw-bold" style="font-size:.78rem;">@slot.Subject?.Name</div>
+                                            <div style="font-size:.68rem; opacity:.85;">@slot.Class?.DisplayName</div>
+                                        </div>
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td style="background:#f8fafc; color:#94a3b8; font-size:.75rem;">—</td>
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@functions {
+    bool IsColorDark(string hex) {
+        if (hex.Length < 7) return false;
+        int r = Convert.ToInt32(hex.Substring(1,2),16);
+        int g = Convert.ToInt32(hex.Substring(3,2),16);
+        int b = Convert.ToInt32(hex.Substring(5,2),16);
+        return (r*299 + g*587 + b*114)/1000 < 128;
+    }
+}

@@ -1,0 +1,110 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model AchievementCreateViewModel
+@{
+    ViewData["Title"] = "Add Achievement";
+    var selectedLearner = Model.Learners.FirstOrDefault(l => l.Id == Model.LearnerId);
+    var learnersJson = System.Text.Json.JsonSerializer.Serialize(
+        Model.Learners.Select(l => new { id = l.Id, name = l.FullName }));
+}
+
+<div class="row justify-content-center">
+<div class="col-md-7">
+<div class="page-header"><h2><i class="bi bi-award me-2"></i>Add Achievement</h2></div>
+<div class="card">
+    <div class="card-body p-4">
+        <form asp-action="AchievementCreate" method="post" enctype="multipart/form-data">
+            @Html.AntiForgeryToken()
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+            <div class="mb-3 position-relative">
+                <label class="form-label">Learner <span class="text-danger">*</span></label>
+                <input type="text" id="learnerSearchInput" class="form-control" autocomplete="off"
+                       placeholder="Type a learner's name…" value="@selectedLearner?.FullName" />
+                <input type="hidden" asp-for="LearnerId" id="learnerIdInput" />
+                <div id="learnerSearchResults" class="list-group position-absolute w-100 shadow-sm"
+                     style="z-index:1000; max-height:220px; overflow-y:auto; display:none;"></div>
+                <span asp-validation-for="LearnerId" class="text-danger small"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="ActivityId" class="form-label">Activity <span class="text-danger">*</span></label>
+                <select asp-for="ActivityId" asp-items="@(new SelectList(Model.Activities, "Id", "Name"))" class="form-select">
+                    <option value="">Select activity…</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Type" class="form-label">Achievement Type</label>
+                <select asp-for="Type" asp-items="Html.GetEnumSelectList<AchievementType>()" class="form-select"></select>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Description" class="form-label">Description <span class="text-danger">*</span></label>
+                <input asp-for="Description" class="form-control" placeholder="e.g. 1st Place – Regional Soccer Tournament" />
+                <span asp-validation-for="Description" class="text-danger small"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="DateAchieved" class="form-label">Date Achieved</label>
+                <input asp-for="DateAchieved" type="date" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label asp-for="Level" class="form-label">Level</label>
+                <select asp-for="Level" asp-items="Html.GetEnumSelectList<AchievementLevel>()" class="form-select"></select>
+            </div>
+            <div class="mb-4">
+                <label asp-for="Document" class="form-label">Supporting Document (optional)</label>
+                <input asp-for="Document" type="file" class="form-control" accept=".pdf,.jpg,.jpeg,.png" />
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-dhs-primary px-4"><i class="bi bi-check me-1"></i>Save Achievement</button>
+                <a asp-action="Achievements" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+<script>
+(function () {
+    var learners = @Html.Raw(learnersJson);
+    var input = document.getElementById('learnerSearchInput');
+    var hidden = document.getElementById('learnerIdInput');
+    var results = document.getElementById('learnerSearchResults');
+
+    function renderResults(list) {
+        results.innerHTML = '';
+        if (list.length === 0) { results.style.display = 'none'; return; }
+        list.forEach(function (l) {
+            var item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'list-group-item list-group-item-action';
+            item.textContent = l.name;
+            item.addEventListener('click', function () {
+                input.value = l.name;
+                hidden.value = l.id;
+                results.style.display = 'none';
+            });
+            results.appendChild(item);
+        });
+        results.style.display = 'block';
+    }
+
+    input.addEventListener('input', function () {
+        hidden.value = '';
+        var q = input.value.trim().toLowerCase();
+        if (!q) { results.style.display = 'none'; return; }
+        renderResults(learners.filter(function (l) {
+            return l.name.toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 25));
+    });
+
+    input.addEventListener('focus', function () {
+        if (input.value.trim()) input.dispatchEvent(new Event('input'));
+    });
+
+    document.addEventListener('click', function (e) {
+        if (e.target !== input && !results.contains(e.target)) results.style.display = 'none';
+    });
+})();
+</script>
+}

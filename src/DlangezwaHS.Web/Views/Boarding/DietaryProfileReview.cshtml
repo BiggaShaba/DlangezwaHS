@@ -1,0 +1,61 @@
+@model DietaryProfileRow
+@{ ViewData["Title"] = "Dietary Profile"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="DietaryProfiles">Dietary Profiles</a></li>
+        <li class="breadcrumb-item active">@Model.LearnerName</li>
+    </ol></nav>
+    <h2><i class="bi bi-clipboard2-pulse me-2"></i>@Model.LearnerName</h2>
+    <p>Added by @Model.ParentName@(Model.SubmittedByLearner ? " (via learner account)" : "") on @Model.SubmittedAt.ToString("dd MMM yyyy")</p>
+</div>
+
+<div class="row justify-content-center">
+<div class="col-lg-8">
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Submitted Items</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-dhs mb-0">
+            <thead><tr><th>Category</th><th>Name</th><th>Severity</th><th>Notes</th></tr></thead>
+            <tbody>
+            @foreach (var i in Model.Items)
+            {
+                <tr>
+                    <td>@i.Category</td>
+                    <td><strong>@i.Name</strong></td>
+                    <td>
+                        @if (i.Severity is "Severe" or "Anaphylactic")
+                        {
+                            <span class="badge bg-danger">@i.Severity</span>
+                        }
+                        else
+                        {
+                            <span>@i.Severity</span>
+                        }
+                    </td>
+                    <td><small>@i.Notes</small></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Supporting Documents</h5></div>
+    <div class="card-body">
+        @if (Model.Documents.Any())
+        {
+            <partial name="_DietaryDocuments" model="Model.Documents" />
+        }
+        else
+        {
+            <span class="text-muted small">No documents were attached.</span>
+        }
+    </div>
+</div>
+
+<p class="small text-muted"><i class="bi bi-info-circle me-1"></i>Parents and learners keep this profile up to date themselves. Contact the parent if anything looks wrong.</p>
+<a asp-action="DietaryProfiles" class="btn btn-outline-secondary">Back</a>
+</div>
+</div>

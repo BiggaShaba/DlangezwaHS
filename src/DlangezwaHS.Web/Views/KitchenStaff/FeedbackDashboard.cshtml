@@ -1,0 +1,274 @@
+@model MealFeedbackDashboardViewModel
+@{
+    ViewData["Title"] = "Meal Feedback";
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var types = new[] { "Breakfast", "Lunch", "Dinner" };
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+    var days = Model.Meals.GroupBy(m => m.DayOfWeek).OrderBy(g => g.Key).ToList();
+    var ordered = Model.Meals.Sum(m => m.Ordered);
+    var collectedPct = ordered > 0 ? Model.WeekCollected * 100.0 / ordered : 0;
+    var wastePct = Model.WeekPrepared > 0 ? Model.WeekLeftovers * 100.0 / Model.WeekPrepared : 0;
+    var openAlerts = Model.Alerts.Count(a => !a.Resolved);
+    string Stars(decimal r) => string.Concat(Enumerable.Range(1, 5).Select(i => i <= Math.Round(r) ? "★" : "☆"));
+
+    var chart = new
+    {
+        days = days.Select(d => d.First().DayLabel[..3]).ToList(),
+        ratings = types.ToDictionary(t => t, t => days.Select(d =>
+        {
+            var rows = d.Where(m => m.MealType == t && m.SubmissionCount > 0).ToList();
+            return rows.Any() ? (decimal?)Math.Round(rows.Sum(m => m.AverageRating * m.SubmissionCount) / rows.Sum(m => m.SubmissionCount), 2) : null;
+        }).ToList()),
+        collected = days.Select(d => d.Sum(m => m.Collected)).ToList(),
+        leftovers = days.Select(d => d.Sum(m => m.Leftovers ?? 0)).ToList(),
+        notCollected = days.Select(d => Math.Max(0, d.Sum(m => m.Ordered) - d.Sum(m => m.Collected) - d.Sum(m => m.Leftovers ?? 0))).ToList(),
+        portion = new[] { Model.Meals.Sum(m => m.TooLittle), Model.Meals.Sum(m => m.JustRight), Model.Meals.Sum(m => m.TooMuch) },
+        trendLabels = Model.WeeklyTrend.Select(t => t.WeekLabel).ToList(),
+        trend = Model.WeeklyTrend.Select(t => t.AverageRating).ToList()
+    };
+    var chartJson = System.Text.Json.JsonSerializer.Serialize(chart);
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-star me-2"></i>Meal Feedback</h2>
+        <p>Anonymous ratings, portion opinions and how much food was collected or left over</p>
+    </div>
+    @if (Model.Weeks.Any())
+    {
+        <form method="get" asp-action="FeedbackDashboard" class="m-0">
+            <label for="weekSelect" class="visually-hidden">Week</label>
+            <select id="weekSelect" name="mealPlanId" class="form-select k-select" onchange="this.form.submit()">
+                @foreach (var w in Model.Weeks)
+                {
+                    <option value="@w.Id" selected="@(Model.SelectedPlanId == w.Id)">Week of @w.WeekStartDate.ToString("dd MMM yyyy")</option>
+                }
+            </select>
+        </form>
+    }
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-star-fill"></i>Average rating</div>
+        <div class="k-stat-value">@if (Model.WeekSubmissions > 0) { <span data-count="@Model.WeekAverage.ToString("0.0", inv)" data-decimals="1">@Model.WeekAverage.ToString("0.0")</span><small class="k-sub"> / 5</small> } else { <span>—</span> }</div>
+        <div class="k-stat-note" style="color:#f59e0b;letter-spacing:.1em">@(Model.WeekSubmissions > 0 ? Stars(Model.WeekAverage) : "")</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-chat-square-heart"></i>Ratings</div><div class="k-stat-value" data-count="@Model.WeekSubmissions">@Model.WeekSubmissions</div><div class="k-stat-note">@Model.RecentComments.Count with comments</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-qr-code-scan"></i>Collected</div><div class="k-stat-value"><span data-count="@collectedPct.ToString("0", inv)">@collectedPct.ToString("0")</span>%</div><div class="k-stat-note">@Model.WeekCollected of @ordered ordered meals</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat @(wastePct > 10 ? "danger" : "dinner")"><div class="k-stat-label"><i class="bi bi-recycle"></i>Leftovers</div><div class="k-stat-value" data-count="@Model.WeekLeftovers">@Model.WeekLeftovers</div><div class="k-stat-note">@wastePct.ToString("0.0")% of prepared</div></div></div>
+</div>
+
+@if (!Model.Meals.Any())
+{
+    <div class="k-empty"><i class="bi bi-calendar-x"></i><strong>No published meal plan for this week</strong><p>Choose another week above.</p></div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-8 k-rise" style="--i:4">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">Ratings by day</h3><p class="k-sub">Average out of 5 for each serving time</p></div></div>
+                <div style="position:relative;height:260px"><canvas id="ratingChart" role="img" aria-label="Average rating per day and meal"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4 k-rise" style="--i:5">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">Portion size</h3><p class="k-sub">What learners said about the amount</p></div></div>
+                <div style="position:relative;height:260px"><canvas id="portionChart" role="img" aria-label="Portion opinions"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-8 k-rise" style="--i:6">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">Collected vs left over</h3><p class="k-sub">Meals collected, left over after service, and still to be collected</p></div></div>
+                <div style="position:relative;height:260px"><canvas id="collectChart" role="img" aria-label="Meals collected and left over per day"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4 k-rise" style="--i:7">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">8-week trend</h3><p class="k-sub">Average rating per week</p></div></div>
+                <div style="position:relative;height:260px"><canvas id="trendChart" role="img" aria-label="Weekly average rating trend"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="k-card mt-4 k-rise" style="--i:8">
+        <div class="k-card-head">
+            <div><h3 class="k-title">Meals this week</h3><p class="k-sub">Grouped by day · open a day to see each meal</p></div>
+            <a asp-action="FeedbackMealsCsv" asp-route-mealPlanId="@Model.SelectedPlanId" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-download"></i>Download full list</a>
+        </div>
+        <div id="dayList" data-more-list data-more-initial="5" data-more-step="5">
+            @foreach (var (day, idx) in days.Select((d, i) => (d, i)))
+            {
+                var id = $"fd-{day.Key}";
+                var rated = day.Where(m => m.SubmissionCount > 0).ToList();
+                var avg = rated.Any() ? rated.Sum(m => m.AverageRating * m.SubmissionCount) / rated.Sum(m => m.SubmissionCount) : 0;
+                var date = Model.WeekStartDate?.AddDays(day.Key - 1);
+                <div class="k-acc" data-more-item>
+                    <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="false" aria-controls="@id">
+                        <span class="k-date" aria-hidden="true"><span><b>@date?.Day</b>@date?.ToString("MMM")</span></span>
+                        <span class="flex-grow-1">
+                            <span class="k-acc-title d-block">@day.First().DayLabel @if (day.Any(m => m.HasActiveAlert)) { <span class="k-pill danger ms-1"><i class="bi bi-exclamation-triangle"></i>alert</span> }</span>
+                            <span class="k-acc-meta">@day.Count() meal(s) · @day.Sum(m => m.Collected) of @day.Sum(m => m.Ordered) collected · @day.Sum(m => m.Leftovers ?? 0) left over</span>
+                        </span>
+                        <span class="text-end me-1">
+                            <span class="d-block fw-bold" style="color:var(--dhs-navy);font-size:1.1rem">@(rated.Any() ? avg.ToString("0.0") : "—")</span>
+                            <span class="k-sub" style="color:#f59e0b">@(rated.Any() ? Stars(avg) : "no ratings")</span>
+                        </span>
+                        <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+                    </button>
+                    <div class="collapse" id="@id">
+                        <div class="k-acc-body">
+                            <div class="k-table-wrap">
+                                <table class="k-table">
+                                    <thead><tr><th>Meal</th><th>Menu</th><th>Rating</th><th style="min-width:120px">Portion</th><th class="k-num">Collected</th><th class="k-num">Left over</th></tr></thead>
+                                    <tbody>
+                                    @foreach (var m in day.OrderBy(m => Array.IndexOf(types, m.MealType)))
+                                    {
+                                        var votes = m.TooLittle + m.JustRight + m.TooMuch;
+                                        <tr>
+                                            <td><span class="k-meal @m.MealType.ToLowerInvariant()"><i class="bi @TypeIcon(m.MealType)"></i>@m.MealType</span></td>
+                                            <td class="fw-semibold">@m.MenuDescription @if (m.HasActiveAlert) { <span class="k-pill danger ms-1">alert</span> }</td>
+                                            <td class="text-nowrap">@if (m.SubmissionCount > 0) { <span style="color:#f59e0b">@Stars(m.AverageRating)</span> <span class="k-sub d-inline">@m.AverageRating.ToString("0.0") (@m.SubmissionCount)</span> } else { <span class="k-sub">—</span> }</td>
+                                            <td>
+                                                @if (votes == 0) { <span class="k-sub">—</span> }
+                                                else
+                                                {
+                                                    <div class="d-flex" style="height:8px;border-radius:99px;overflow:hidden" title="Too little @m.TooLittle · Just right @m.JustRight · Too much @m.TooMuch">
+                                                        <span style="width:@(m.TooLittle * 100 / votes)%;background:#f59e0b"></span>
+                                                        <span style="width:@(m.JustRight * 100 / votes)%;background:#10b981"></span>
+                                                        <span style="width:@(m.TooMuch * 100 / votes)%;background:var(--dhs-blue-dark)"></span>
+                                                    </div>
+                                                    <div class="k-sub">@(m.JustRight * 100 / votes)% just right</div>
+                                                }
+                                            </td>
+                                            <td class="k-num">@m.Collected<span class="k-sub d-inline"> / @m.Ordered</span></td>
+                                            <td class="k-num fw-bold">@(m.Leftovers?.ToString() ?? "—")</td>
+                                        </tr>
+                                    }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="dayList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more days</button></div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-6 k-rise" style="--i:9">
+            <div class="k-card h-100">
+                <div class="k-card-head">
+                    <div><h3 class="k-title">Comments</h3><p class="k-sub">@Model.RecentComments.Count this week · newest first</p></div>
+                    @if (Model.RecentComments.Any()) { <a asp-action="FeedbackCommentsCsv" asp-route-mealPlanId="@Model.SelectedPlanId" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-download"></i>Download full list</a> }
+                </div>
+                @if (!Model.RecentComments.Any()) { <p class="k-sub mb-0">No comments this week.</p> }
+                <div id="commentList" data-more-list data-more-initial="5" data-more-step="5">
+                    @foreach (var c in Model.RecentComments)
+                    {
+                        <div class="p-3 mb-2" data-more-item style="border-radius:16px;background:@(c.Rating <= 2 ? "#fef2f2" : "var(--dhs-light)")">
+                            <div class="d-flex justify-content-between gap-2">
+                                <span class="k-sub">@c.MealLabel</span>
+                                <span style="color:#f59e0b;white-space:nowrap">@Stars(c.Rating)</span>
+                            </div>
+                            <div class="mt-1" style="color:var(--dhs-navy)">“@c.Comment”</div>
+                            @if (c.Portion is not null) { <span class="k-pill mt-2">@c.Portion</span> }
+                        </div>
+                    }
+                </div>
+                <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="commentList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+            </div>
+        </div>
+        <div class="col-lg-6 k-rise" style="--i:10">
+            <div class="k-card h-100">
+                <div class="k-card-head">
+                    <div><h3 class="k-title">Quality alerts</h3><p class="k-sub">Raised when a meal averages below 2.5 across 5+ ratings · @openAlerts open</p></div>
+                    @if (Model.Alerts.Any()) { <a asp-action="QualityAlertsCsv" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-download"></i>Download full list</a> }
+                </div>
+                @if (!Model.Alerts.Any()) { <p class="k-sub mb-0">No quality alerts raised.</p> }
+                <div id="alertList" data-more-list data-more-initial="5" data-more-step="5">
+                    @foreach (var a in Model.Alerts)
+                    {
+                        <div class="p-3 mb-2" data-more-item style="border-radius:16px;border:1px solid @(a.Resolved ? "#e2e8f0" : "#fecaca");background:@(a.Resolved ? "#fff" : "#fef2f2")">
+                            <div class="d-flex justify-content-between gap-2 flex-wrap">
+                                <div>
+                                    <div class="fw-bold" style="color:var(--dhs-navy)">@a.MenuDescription</div>
+                                    <div class="k-sub">@a.AverageRating.ToString("0.0") / 5 from @a.SubmissionCount ratings · raised @a.CreatedAt.AddHours(2).ToString("dd MMM yyyy")</div>
+                                </div>
+                                <span class="k-pill @(a.Resolved ? "ok" : "danger")">@(a.Resolved ? $"Resolved {a.ResolvedAt?.AddHours(2):dd MMM}" : "Open")</span>
+                            </div>
+                            @if (a.Resolved)
+                            {
+                                <div class="k-sub mt-2"><i class="bi bi-check2 me-1"></i>@a.ResolutionNotes</div>
+                            }
+                            else
+                            {
+                                <form method="post" asp-action="ResolveQualityAlert" class="d-flex gap-2 mt-2" data-busy>
+                                    <input type="hidden" name="alertId" value="@a.Id" />
+                                    <input type="hidden" name="mealPlanId" value="@Model.SelectedPlanId" />
+                                    <input type="text" name="notes" class="form-control k-input" maxlength="500" required placeholder="What was changed? e.g. new recipe" aria-label="Action taken" />
+                                    <button type="submit" class="k-btn k-btn-primary k-btn-sm" data-busy-text="Saving…">Resolve</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="alertList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    if (typeof Chart === 'undefined') return;
+    const d = @Html.Raw(chartJson);
+    const NAVY = '#0B2A4A', BLUE = '#97C8E9', BLUE_DARK = '#5ea8d3', GREY = '#6B7280';
+    const COLORS = { Breakfast: '#f59e0b', Lunch: '#0ea5e9', Dinner: '#6366f1' };
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const animation = { duration: reduce ? 0 : 1800, easing: 'easeOutQuart',
+        delay: c => c.type === 'data' && c.mode === 'default' ? c.dataIndex * 90 + c.datasetIndex * 140 : 0 };
+    const tooltip = { backgroundColor: NAVY, padding: 12, cornerRadius: 12, usePointStyle: true };
+    const legend = { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'rectRounded', color: NAVY, padding: 14 } };
+    const axis = { grid: { color: 'rgba(11,42,74,.07)' }, border: { display: false }, ticks: { color: GREY } };
+
+    const el = id => document.getElementById(id);
+    if (el('ratingChart')) new Chart(el('ratingChart'), {
+        type: 'bar',
+        data: { labels: d.days, datasets: Object.keys(COLORS).map(t => ({ label: t, data: d.ratings[t], backgroundColor: COLORS[t], borderRadius: 6, borderSkipped: false, maxBarThickness: 18 })) },
+        options: { responsive: true, maintainAspectRatio: false, animation, interaction: { mode: 'index', intersect: false },
+            plugins: { legend, tooltip: { ...tooltip, callbacks: { label: c => c.parsed.y == null ? ` ${c.dataset.label}: no ratings` : ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)} / 5` } } },
+            scales: { x: { ...axis, grid: { display: false } }, y: { ...axis, min: 0, max: 5, ticks: { ...axis.ticks, stepSize: 1 } } } }
+    });
+    if (el('portionChart')) new Chart(el('portionChart'), {
+        type: 'doughnut',
+        data: { labels: ['Too little', 'Just right', 'Too much'], datasets: [{ data: d.portion, backgroundColor: ['#f59e0b', '#10b981', BLUE_DARK], borderWidth: 0, hoverOffset: 10 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '64%', animation: { duration: reduce ? 0 : 1800, animateRotate: true, easing: 'easeOutQuart' },
+            plugins: { legend, tooltip: { ...tooltip, callbacks: { label: c => { const t = d.portion.reduce((a, b) => a + b, 0) || 1; return ` ${c.label}: ${c.parsed} (${Math.round(c.parsed / t * 100)}%)`; } } } } }
+    });
+    if (el('collectChart')) new Chart(el('collectChart'), {
+        type: 'bar',
+        data: { labels: d.days, datasets: [
+            { label: 'Collected', data: d.collected, backgroundColor: NAVY, borderRadius: 6, borderSkipped: false, maxBarThickness: 34 },
+            { label: 'Left over', data: d.leftovers, backgroundColor: '#f59e0b', borderRadius: 6, borderSkipped: false, maxBarThickness: 34 },
+            { label: 'Not yet served', data: d.notCollected, backgroundColor: BLUE, borderRadius: 6, borderSkipped: false, maxBarThickness: 34 }
+        ] },
+        options: { responsive: true, maintainAspectRatio: false, animation, interaction: { mode: 'index', intersect: false },
+            plugins: { legend, tooltip }, scales: { x: { ...axis, stacked: true, grid: { display: false } }, y: { ...axis, stacked: true, beginAtZero: true, ticks: { ...axis.ticks, precision: 0 } } } }
+    });
+    if (el('trendChart')) new Chart(el('trendChart'), {
+        type: 'line',
+        data: { labels: d.trendLabels, datasets: [{ label: 'Average rating', data: d.trend, borderColor: NAVY, borderWidth: 3, tension: .4, fill: true,
+            backgroundColor: c => { const { ctx, chartArea } = c.chart; if (!chartArea) return 'rgba(151,200,233,.3)';
+                const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); g.addColorStop(0, 'rgba(151,200,233,.55)'); g.addColorStop(1, 'rgba(151,200,233,0)'); return g; },
+            pointBackgroundColor: '#fff', pointBorderColor: NAVY, pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 7 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: { duration: reduce ? 0 : 1800, easing: 'easeOutQuart' },
+            animations: { y: { from: c => c.chart.scales.y ? c.chart.scales.y.getPixelForValue(0) : undefined } },
+            plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { label: c => ` ${c.parsed.y.toFixed(2)} / 5` } } },
+            scales: { x: { ...axis, grid: { display: false } }, y: { ...axis, min: 0, max: 5, ticks: { ...axis.ticks, stepSize: 1 } } } }
+    });
+})();
+</script>
+}

@@ -1,0 +1,458 @@
+@using DlangezwaHS.Web.Data
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject UserManager<ApplicationUser> UserManager
+@inject DlangezwaHS.Web.Services.NavBadgeService NavBadges
+@{
+    // Menu items with something new since the user last opened that page
+    var newPages = User.Identity?.IsAuthenticated == true
+        ? await NavBadges.GetNewPagesAsync(User)
+        : new HashSet<string>();
+    Microsoft.AspNetCore.Html.IHtmlContent NewDot(params string[] pages)
+        => pages.Any(newPages.Contains)
+            ? new Microsoft.AspNetCore.Html.HtmlString("<span class=\"nav-new-dot\" title=\"New\"><span class=\"visually-hidden\">(new)</span></span>")
+            : Microsoft.AspNetCore.Html.HtmlString.Empty;
+
+    // Highlights the menu section containing the current page ("Controller.Action" or "Controller.*")
+    var here = $"{ViewContext.RouteData.Values["controller"]}.{ViewContext.RouteData.Values["action"]}";
+    string On(params string[] pages) => pages.Any(p => p.EndsWith(".*")
+        ? here.StartsWith(p[..^1], StringComparison.OrdinalIgnoreCase)
+        : here.Equals(p, StringComparison.OrdinalIgnoreCase)) ? "active" : "";
+
+    var me = User.Identity?.IsAuthenticated == true ? await UserManager.GetUserAsync(User) : null;
+    var myName = me is null ? User.Identity?.Name : $"{me.FirstName} {me.LastName}".Trim();
+    var myInitials = me is null ? "?" : $"{me.FirstName.FirstOrDefault()}{me.LastName.FirstOrDefault()}".ToUpperInvariant();
+    var myId = me?.Id;
+    var isHeadChef = myId is not null && User.IsInRole("KitchenStaff")
+        && await Db.KitchenTeams.AnyAsync(t => t.IsActive && t.HeadChef != null && t.HeadChef.UserId == myId);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@(ViewData["Title"] != null ? ViewData["Title"] + " – " : "")Dlangezwa High School</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="icon" type="image/png" href="~/images/dhs-logo.png" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/kitchen.css" asp-append-version="true" />
+    <style>
+        .nav-new-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 0 2px rgba(56,189,248,.3); margin-left: .35rem; vertical-align: middle; }
+    </style>
+</head>
+<body>
+    <!-- Top nav -->
+    <nav class="navbar navbar-expand-lg dhs-navbar">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+                <img src="~/images/dhs-logo.png" asp-append-version="true" alt="Dlangezwa High School crest" class="dhs-logo" width="34" height="42" />
+                <span class="fw-bold">Dlangezwa High</span>
+            </a>
+            <button class="navbar-toggler text-white border-white" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-1">
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        @* ── ADMIN ─────────────────────────────────────────────────────── *@
+                        if (User.IsInRole("Admin"))
+                        {
+                            <li class="nav-item"><a class="nav-link @On("Admin.Dashboard")" asp-controller="Admin" asp-action="Dashboard">Dashboard</a></li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("Admin.Applications", "Admin.Enrollments", "Admin.Rooms", "Admin.Teachers", "Admin.Housemasters", "Admin.KitchenStaff", "Admin.RegisterKitchenStaff")" href="#" data-bs-toggle="dropdown" aria-expanded="false">People @NewDot("Admin.Applications")</a>
+                                <ul class="dropdown-menu">
+                                    <li><h6 class="dropdown-header">Admissions</h6></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="Applications"><i class="bi bi-file-earmark-text"></i>Applications @NewDot("Admin.Applications")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="Enrollments"><i class="bi bi-person-badge"></i>Enrolments</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="Rooms"><i class="bi bi-building"></i>Boarding &amp; Rooms</a></li>
+                                    <li><h6 class="dropdown-header">Staff</h6></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="Teachers"><i class="bi bi-person-workspace"></i>Teachers</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="Housemasters"><i class="bi bi-shield-lock"></i>Housemasters</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="KitchenStaff"><i class="bi bi-egg-fried"></i>Kitchen Staff</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("Timetable.*", "Admin.AcademicReports", "QuestionPapers.*")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Academics</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-controller="Timetable" asp-action="Admin"><i class="bi bi-calendar3-week"></i>Timetable</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="AcademicReports"><i class="bi bi-bar-chart"></i>Academic Reports</a></li>
+                                    <li><a class="dropdown-item" asp-controller="QuestionPapers" asp-action="Index"><i class="bi bi-journals"></i>Question Papers</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("Admin.KitchenSchedule", "Admin.KitchenScheduleCreate", "Admin.KitchenTeams", "Boarding.MealComplianceReport")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Kitchen @NewDot("Admin.KitchenSchedule")</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="KitchenSchedule"><i class="bi bi-calendar2-check"></i>Kitchen Schedule @NewDot("Admin.KitchenSchedule")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="KitchenScheduleCreate"><i class="bi bi-calendar-plus"></i>Schedule Teams</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="KitchenTeams"><i class="bi bi-people"></i>Kitchen Teams</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Boarding" asp-action="MealComplianceReport"><i class="bi bi-file-earmark-bar-graph"></i>Meal Compliance Report</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("Admin.Payments", "Transport.*", "Extracurricular.*")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Operations</a>
+                                <div class="dropdown-menu dropdown-menu-end k-mega">
+                                    <div>
+                                        <h6 class="dropdown-header">Finance</h6>
+                                        <a class="dropdown-item" asp-controller="Admin" asp-action="Payments"><i class="bi bi-credit-card"></i>Payments</a>
+                                        <h6 class="dropdown-header">Transport</h6>
+                                        <a class="dropdown-item" asp-controller="Transport" asp-action="ScheduleTransport"><i class="bi bi-signpost-split"></i>Schedule Transport</a>
+                                        <a class="dropdown-item" asp-controller="Transport" asp-action="Trips"><i class="bi bi-list-ul"></i>Trips</a>
+                                        <a class="dropdown-item" asp-controller="Transport" asp-action="Drivers"><i class="bi bi-person-badge"></i>Drivers</a>
+                                        <a class="dropdown-item" asp-controller="Transport" asp-action="Buses"><i class="bi bi-bus-front"></i>Buses</a>
+                                        <a class="dropdown-item" asp-controller="Transport" asp-action="FuelRecords"><i class="bi bi-fuel-pump"></i>Fuel Management</a>
+                                    </div>
+                                    <div>
+                                        <h6 class="dropdown-header">Extracurricular</h6>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="ActivityCreate"><i class="bi bi-plus-circle"></i>Schedule Activity</a>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Activities"><i class="bi bi-trophy"></i>Activities</a>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="AssignCoach"><i class="bi bi-person-badge"></i>Assign Coaches</a>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Achievements"><i class="bi bi-award"></i>Achievements</a>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Report"><i class="bi bi-bar-chart"></i>Activity Report</a>
+                                    </div>
+                                </div>
+                            </li>
+                        }
+
+                        @* ── TEACHER ───────────────────────────────────────────────────── *@
+                        else if (User.IsInRole("Teacher"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Teacher" asp-action="Dashboard">
+                                    <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Teacher" asp-action="MyClasses">
+                                    <i class="bi bi-grid me-1"></i>My Classes
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Teacher" asp-action="Assessments">
+                                    <i class="bi bi-clipboard2-data me-1"></i>Assessments
+                                </a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                                    <i class="bi bi-collection me-1"></i>Resources
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="QuestionPapers" asp-action="Index">
+                                            <i class="bi bi-journals me-2"></i>Question Papers
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Timetable" asp-action="TeacherView">
+                                            <i class="bi bi-calendar3-week me-2"></i>My Timetable
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Transport" asp-action="Index">
+                                            <i class="bi bi-bus-front me-2"></i>Transport
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Activities">
+                                            <i class="bi bi-trophy me-2"></i>Activities
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+
+                            var currentTeacher = await Db.Teachers.AsNoTracking()
+                                .FirstOrDefaultAsync(t => t.UserId == UserManager.GetUserId(User));
+
+                            if (currentTeacher?.IsCoach == true)
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Extracurricular" asp-action="MyAssignments">
+                                        <i class="bi bi-clipboard2-check me-1"></i>My Coaching
+                                    </a>
+                                </li>
+                            }
+                        }
+
+                        @* ── HOUSEMASTER ───────────────────────────────────────────────── *@
+                        else if (User.IsInRole("Housemaster"))
+                        {
+                            <li class="nav-item"><a class="nav-link @On("Boarding.Dashboard")" asp-controller="Boarding" asp-action="Dashboard">Dashboard @NewDot("Boarding.Dashboard")</a></li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("Boarding.Scanner", "Boarding.LeaveRequests", "Boarding.MovementLog", "Boarding.Boarders", "Boarding.LearnerQr")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Boarding @NewDot("Boarding.LeaveRequests")</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-controller="Boarding" asp-action="Scanner"><i class="bi bi-qr-code-scan"></i>Check-In / Out Scanner</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Boarding" asp-action="LeaveRequests"><i class="bi bi-envelope-paper"></i>Leave Requests @NewDot("Boarding.LeaveRequests")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Boarding" asp-action="MovementLog"><i class="bi bi-list-ul"></i>Movement Log</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Boarding" asp-action="Boarders"><i class="bi bi-people"></i>Boarders &amp; QR Badges</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("Boarding.DietaryProfiles", "Boarding.DietaryProfileReview", "Boarding.MealComplianceReport")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Meals @NewDot("Boarding.DietaryProfiles")</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-controller="Boarding" asp-action="DietaryProfiles"><i class="bi bi-clipboard2-pulse"></i>Dietary Profiles @NewDot("Boarding.DietaryProfiles")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Boarding" asp-action="MealComplianceReport"><i class="bi bi-file-earmark-bar-graph"></i>Meal Compliance Report</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item"><a class="nav-link @On("Transport.*")" asp-controller="Transport" asp-action="Index">Transport</a></li>
+                        }
+
+                        @* ── KITCHEN STAFF ─────────────────────────────────────────────── *@
+                        else if (User.IsInRole("KitchenStaff"))
+                        {
+                            <li class="nav-item"><a class="nav-link @On("KitchenStaff.Dashboard")" asp-controller="KitchenStaff" asp-action="Dashboard">Dashboard</a></li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("KitchenStaff.MealPlan", "KitchenStaff.MealPlanCreate", "KitchenStaff.MealPlanPublish", "KitchenStaff.Meals", "KitchenStaff.MealEdit", "KitchenStaff.PreOrders", "KitchenStaff.DietaryProfiles", "KitchenStaff.DietaryProfileReview", "KitchenStaff.FeedbackDashboard")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Meals @NewDot("KitchenStaff.DietaryProfiles", "KitchenStaff.PreOrders", "KitchenStaff.FeedbackDashboard")</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="MealPlan"><i class="bi bi-calendar3"></i>Meal Plans</a></li>
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="Meals"><i class="bi bi-journal-richtext"></i>Meal Library</a></li>
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="PreOrders"><i class="bi bi-basket"></i>Pre-Orders @NewDot("KitchenStaff.PreOrders")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="DietaryProfiles"><i class="bi bi-clipboard2-pulse"></i>Dietary Profiles @NewDot("KitchenStaff.DietaryProfiles")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="FeedbackDashboard"><i class="bi bi-star"></i>Feedback @NewDot("KitchenStaff.FeedbackDashboard")</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("KitchenStaff.Inventory", "KitchenStaff.ReceiveStock", "KitchenStaff.RecordUsage", "KitchenStaff.Receipt", "KitchenStaff.InventoryRequisition")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Stock @NewDot("KitchenStaff.Inventory")</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="Inventory"><i class="bi bi-box-seam"></i>Inventory @NewDot("KitchenStaff.Inventory")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="ReceiveStock"><i class="bi bi-receipt"></i>Receive Stock</a></li>
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="RecordUsage"><i class="bi bi-fire"></i>Usage &amp; Leftovers</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @On("KitchenStaff.MyTasks", "KitchenStaff.MealScanner", "KitchenStaff.KitchenTeams", "KitchenStaff.KitchenScheduleCreate", "KitchenStaff.MealAttendance")" href="#" data-bs-toggle="dropdown" aria-expanded="false">Kitchen @NewDot("KitchenStaff.MyTasks")</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="MyTasks"><i class="bi bi-list-check"></i>My Tasks @NewDot("KitchenStaff.MyTasks")</a></li>
+                                    <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="MealScanner"><i class="bi bi-qr-code-scan"></i>Meal Scanner</a></li>
+                                    @if (isHeadChef)
+                                    {
+                                        <li><h6 class="dropdown-header">Head chef</h6></li>
+                                        <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="KitchenScheduleCreate"><i class="bi bi-calendar-plus"></i>Schedule Teams</a></li>
+                                        <li><a class="dropdown-item" asp-controller="KitchenStaff" asp-action="KitchenTeams"><i class="bi bi-people"></i>Kitchen Teams</a></li>
+                                    }
+                                </ul>
+                            </li>
+                        }
+
+                        @* ── LEARNER ───────────────────────────────────────────────────── *@
+                        else if (User.IsInRole("Learner"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Learner" asp-action="Index">
+                                    <i class="bi bi-house me-1"></i>Dashboard
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Timetable" asp-action="LearnerView">
+                                    <i class="bi bi-table me-1"></i>Timetable
+                                </a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                                    <i class="bi bi-journal-bookmark me-1"></i>Academics
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Learner" asp-action="AcademicReport">
+                                            <i class="bi bi-bar-chart me-2"></i>Academic Report
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Learner" asp-action="Assessments">
+                                            <i class="bi bi-pencil-square me-2"></i>My Assessments
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Learner" asp-action="LearnerAttendance">
+                                            <i class="bi bi-calendar-check me-2"></i>Attendance
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="QuestionPapers" asp-action="Index">
+                                            <i class="bi bi-journals me-2"></i>Question Papers
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Activities">
+                                            <i class="bi bi-trophy me-2"></i>Activities
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Achievements">
+                                            <i class="bi bi-award me-2"></i>Achievements
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                                    <i class="bi bi-egg-fried me-1"></i>Meals @NewDot("Learner.MealPlan")
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Learner" asp-action="MealPlan">
+                                            <i class="bi bi-calendar-week me-2"></i>This Week's Menu @NewDot("Learner.MealPlan")
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Learner" asp-action="PreOrder">
+                                            <i class="bi bi-cart-check me-2"></i>Pre-Order Meals
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Learner" asp-action="DietaryProfile">
+                                            <i class="bi bi-clipboard2-pulse me-2"></i>Dietary Profile
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Learner" asp-action="LearnerQr">
+                                            <i class="bi bi-qr-code me-2"></i>QR Badge
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+                        }
+
+                        @* ── PARENT ────────────────────────────────────────────────────── *@
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Parent" asp-action="Index">
+                                    <i class="bi bi-house me-1"></i>Dashboard
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Parent" asp-action="Apply">
+                                    <i class="bi bi-plus-circle me-1"></i>Apply
+                                </a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                                    <i class="bi bi-person-badge me-1"></i>My Learners
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Parent" asp-action="Index">
+                                            <i class="bi bi-grid me-2"></i>All Learners
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Parent" asp-action="Index">
+                                            <i class="bi bi-wallet2 me-2"></i>Account & Fees
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Parent" asp-action="Index">
+                                            <i class="bi bi-calendar-check me-2"></i>Attendance
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="QuestionPapers" asp-action="Index">
+                                            <i class="bi bi-journals me-2"></i>Question Papers
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Transport" asp-action="Trips">
+                                            <i class="bi bi-bus-front me-2"></i>Transport
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Activities">
+                                            <i class="bi bi-trophy me-2"></i>Activities
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" asp-controller="Extracurricular" asp-action="Achievements">
+                                            <i class="bi bi-award me-2"></i>Achievements
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+                        }
+
+                        @* ── USER MENU (all roles) ─────────────────────────────────────── *@
+                        <li class="nav-item d-flex align-items-center">
+                            <a class="nav-link nav-icon @On("Calendar.*")" asp-controller="Calendar" asp-action="Index" title="Calendar" aria-label="Calendar"><i class="bi bi-calendar3"></i><span class="d-lg-none ms-2">Calendar</span></a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle nav-user" href="#" id="userMenu" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu">
+                                <span class="nav-avatar" aria-hidden="true">@myInitials</span><span class="nav-user-name">@me?.FirstName</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><div class="px-3 py-2"><div class="fw-bold" style="color:var(--dhs-navy)">@myName</div><div class="small text-muted">@User.Identity.Name</div></div></li>
+                                <li><hr class="dropdown-divider"></li>
+                                @if (User.IsInRole("Admin"))
+                                {
+                                    <li><a class="dropdown-item" asp-controller="Admin" asp-action="Settings"><i class="bi bi-gear"></i>Settings</a></li>
+                                }
+                                <li><a class="dropdown-item" asp-controller="Calendar" asp-action="Index"><i class="bi bi-calendar3"></i>Calendar</a></li>
+                                <li>
+                                    <form method="post" asp-controller="Account" asp-action="Logout">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right"></i>Sign Out</button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+
+                    }
+                    else
+                    {
+                        <li class="nav-item"><a class="nav-link" href="/#about">About</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#academics">Academics</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#boarding">Boarding</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Contact">Contact</a></li>
+                        <li class="nav-item ms-lg-2"><a class="nav-link" asp-controller="Account" asp-action="Login"><i class="bi bi-box-arrow-in-right me-1"></i>Sign In</a></li>
+                        <li class="nav-item"><a class="btn btn-dhs-secondary ms-lg-1 px-3" asp-controller="Account" asp-action="Register">Sign Up</a></li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Alerts from TempData -->
+    <div class="container @(TempData.Peek("Success") != null || TempData.Peek("Error") != null ? "mt-3" : "")">
+        @if (TempData["Success"] is string success)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>@success
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+        @if (TempData["Error"] is string error)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-circle-fill me-2"></i>@error
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+    </div>
+
+    @if (ViewData["FullWidth"] is true)
+    {
+        <main>@RenderBody()</main>
+    }
+    else
+    {
+        <main class="container py-4">
+            @RenderBody()
+        </main>
+    }
+
+    <footer class="dhs-footer @(ViewData["FullWidth"] is true ? "" : "mt-5") py-4">
+        <div class="container text-center">
+            <small>&copy; @DateTime.Now.Year Dlangezwa High School – KwaZulu-Natal, South Africa</small>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/kitchen.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

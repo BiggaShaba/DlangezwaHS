@@ -1,0 +1,122 @@
+@model IList<DietaryProfileRow>
+@{
+    // Learners per item (an item counted once per learner), split into severe vs other for allergies
+    var groups = Model.SelectMany(p => p.Items.Select(i => (p.LearnerId, i.Category, Name: i.Name.Trim(), i.Severity)))
+        .GroupBy(x => (Allergy: x.Category == "Allergy", Key: x.Name.ToLowerInvariant()))
+        .Select(g => new
+        {
+            name = g.First().Name.Length > 0 ? char.ToUpper(g.First().Name[0]) + g.First().Name[1..] : g.First().Name,
+            allergy = g.Key.Allergy,
+            category = g.First().Category,
+            severe = g.Where(x => x.Severity is "Severe" or "Anaphylactic").Select(x => x.LearnerId).Distinct().Count(),
+            total = g.Select(x => x.LearnerId).Distinct().Count()
+        })
+        .OrderByDescending(x => x.total).ThenBy(x => x.name).ToList();
+    var json = System.Text.Json.JsonSerializer.Serialize(groups);
+}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const groups = @Html.Raw(json);
+    const NAVY = '#0B2A4A', NAVY_MID = '#1a4a7a', BLUE = '#97C8E9', BLUE_DARK = '#5ea8d3', GREY = '#6B7280', RED = '#dc2626';
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const animation = { duration: reduce ? 0 : 1800, easing: 'easeOutQuart',
+        delay: c => c.type === 'data' && c.mode === 'default' ? c.dataIndex * 110 : 0 };
+    const grad = (chart, from, to) => {
+        const { ctx, chartArea } = chart; if (!chartArea) return from;
+        const g = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0); g.addColorStop(0, from); g.addColorStop(1, to); return g;
+    };
+    const opts = (stacked) => ({
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation,
+        plugins: {
+            legend: { display: stacked, position: 'bottom', labels: { usePointStyle: true, pointStyle: 'rectRounded', color: NAVY } },
+            tooltip: { backgroundColor: NAVY, padding: 12, cornerRadius: 12,
+                callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.x} learner${c.parsed.x === 1 ? '' : 's'}` } }
+        },
+        scales: {
+            x: { stacked, beginAtZero: true, grid: { color: 'rgba(11,42,74,.07)' }, border: { display: false }, ticks: { color: GREY, precision: 0 } },
+            y: { stacked, grid: { display: false }, border: { display: false }, ticks: { color: NAVY, font: { weight: '600' } } }
+        }
+    });
+
+    function allergyChart(el, list) {
+        return new Chart(el, {
+            type: 'bar',
+            data: { labels: list.map(g => g.name), datasets: [
+                { label: 'Severe / anaphylactic', data: list.map(g => g.severe), backgroundColor: RED, borderRadius: 8, borderSkipped: false, maxBarThickness: 26 },
+                { label: 'Mild', data: list.map(g => g.total - g.severe), backgroundColor: c => grad(c.chart, BLUE, BLUE_DARK), borderRadius: 8, borderSkipped: false, maxBarThickness: 26 }
+            ] },
+            options: opts(true)
+        });
+    }
+    function requirementChart(el, list) {
+        return new Chart(el, {
+            type: 'bar',
+            data: { labels: list.map(g => g.name), datasets: [
+                { label: 'Learners', data: list.map(g => g.total), backgroundColor: c => grad(c.chart, BLUE_DARK, NAVY), borderRadius: 8, borderSkipped: false, maxBarThickness: 26 }
+            ] },
+            options: opts(false)
+        });
+    }
+
+    const allergies = groups.filter(g => g.allergy), requirements = groups.filter(g => !g.allergy);
+    if (typeof Chart !== 'undefined') {
+        const a = document.getElementById('allergyChart'), r = document.getElementById('requirementChart');
+        if (a) allergyChart(a, allergies.slice(0, 5));
+        if (r) requirementChart(r, requirements.slice(0, 5));
+
+        // "See all" draws the full chart the first time it opens, so its bars climb in view
+        let full = null;
+        const panel = document.getElementById('allNeeds');
+        panel?.addEventListener('shown.bs.collapse', () => {
+            document.querySelector('#seeAllNeeds span').textContent = 'Hide full list';
+            if (full) { full.reset(); full.update(); return; }
+            const all = groups;
+            document.getElementById('allNeedsWrap').style.height = Math.max(220, all.length * 34 + 60) + 'px';
+            full = new Chart(document.getElementById('allChart'), {
+                type: 'bar',
+                data: { labels: all.map(g => g.name), datasets: [
+                    { label: 'Severe / anaphylactic allergy', data: all.map(g => g.allergy ? g.severe : 0), backgroundColor: RED, borderRadius: 8, borderSkipped: false, maxBarThickness: 22 },
+                    { label: 'Mild allergy', data: all.map(g => g.allergy ? g.total - g.severe : 0), backgroundColor: BLUE, borderRadius: 8, borderSkipped: false, maxBarThickness: 22 },
+                    { label: 'Requirement', data: all.map(g => g.allergy ? 0 : g.total), backgroundColor: NAVY_MID, borderRadius: 8, borderSkipped: false, maxBarThickness: 22 }
+                ] },
+                options: opts(true)
+            });
+        });
+        panel?.addEventListener('hidden.bs.collapse', () => document.querySelector('#seeAllNeeds span').textContent = 'See all allergies & requirements');
+    }
+
+    // Search shows every match; clearing it goes back to the latest 10
+    const search = document.getElementById('profileSearch');
+    search?.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#profileList [data-more-item]').forEach(row => {
+            const match = !q || row.dataset.search.includes(q);
+            row.toggleAttribute('data-filtered-out', !match);
+            row.hidden = !match;
+            if (q && match) { row.classList.remove('k-more-hidden'); shown++; }
+        });
+        document.getElementById('noProfileMatch').hidden = !q || shown > 0;
+        if (!q) window.kInitMore(document);
+        else document.querySelector('[data-more-btn="profileList"]').hidden = true;
+    });
+
+    // Download dates
+    const from = document.getElementById('dlFrom'), to = document.getElementById('dlTo');
+    if (!from) return;
+    const iso = d => d.toISOString().slice(0, 10);
+    document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
+        const end = new Date(to.max);
+        if (b.dataset.range === 'all') { from.value = ''; to.value = to.max; return; }
+        const start = new Date(end); start.setDate(start.getDate() - Number(b.dataset.range));
+        from.value = iso(start); to.value = iso(end);
+    }));
+    document.getElementById('downloadForm').addEventListener('submit', e => {
+        const bad = from.value && to.value && from.value > to.value;
+        document.getElementById('dlError').hidden = !bad;
+        if (bad) { e.preventDefault(); return; }
+        setTimeout(() => bootstrap.Modal.getInstance(document.getElementById('downloadModal'))?.hide(), 300);
+    });
+})();
+</script>

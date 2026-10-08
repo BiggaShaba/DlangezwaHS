@@ -1,0 +1,150 @@
+@model AdminDashboardViewModel
+@{ ViewData["Title"] = "Admin Dashboard"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-speedometer2 me-2"></i>Admin Dashboard</h2>
+    <p>Dlangezwa High School — Administration Overview</p>
+</div>
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4 col-xl-2-4">
+        <div class="stat-card">
+            <div class="stat-icon orange"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+                <div class="stat-value">@Model.PendingApplications</div>
+                <div class="stat-label">Pending</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2-4">
+        <div class="stat-card">
+            <div class="stat-icon navy"><i class="bi bi-person-badge"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalEnrolments</div>
+                <div class="stat-label">Enrolments</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2-4">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-building"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalRooms</div>
+                <div class="stat-label">Rooms</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2-4">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-door-open"></i></div>
+            <div>
+                <div class="stat-value">@Model.AvailableBeds</div>
+                <div class="stat-label">Avail. Beds</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4 col-xl-2-4">
+        <div class="stat-card">
+            <div class="stat-icon purple"><i class="bi bi-cash-stack"></i></div>
+            <div>
+                <div class="stat-value">R@(Model.TotalRevenue.ToString("N0"))</div>
+                <div class="stat-label">Revenue</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Recent Applications -->
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>Pending Applications</h5>
+                <a asp-action="Applications" asp-route-status="pending" class="btn btn-sm btn-dhs-secondary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                @if (!Model.RecentApplications.Any())
+                {
+                    <div class="p-4 text-center text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No pending applications</div>
+                }
+                else
+                {
+                    <table class="table table-dhs mb-0">
+                        <thead><tr><th>Learner</th><th>Parent</th><th>Submitted</th><th></th></tr></thead>
+                        <tbody>
+                        @foreach (var a in Model.RecentApplications)
+                        {
+                            <tr>
+                                <td><strong>@a.LearnerName</strong></td>
+                                <td><small class="text-muted">@a.ParentEmail</small></td>
+                                <td><small>@a.SubmittedAt.ToString("dd MMM")</small></td>
+                                <td>
+                                    <a asp-action="ApplicationDetail" asp-route-id="@a.Id"
+                                       class="btn btn-sm btn-dhs-primary">Review</a>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Payments -->
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-credit-card me-2"></i>Recent Payments</h5>
+                <a asp-action="Payments" class="btn btn-sm btn-dhs-secondary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                @if (!Model.RecentPayments.Any())
+                {
+                    <div class="p-4 text-center text-muted"><i class="bi bi-cash fs-2 d-block mb-2"></i>No payments yet</div>
+                }
+                else
+                {
+                    <table class="table table-dhs mb-0">
+                        <thead><tr><th>Learner</th><th>Type</th><th>Amount</th></tr></thead>
+                        <tbody>
+                        @foreach (var p in Model.RecentPayments)
+                        {
+                            <tr>
+                                <td><small>@p.Learner?.FullName</small></td>
+                                <td><small>@p.Type</small></td>
+                                <td><strong class="text-success">R@(p.Amount.ToString("N2"))</strong></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card mt-4">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h5></div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2">
+            <a asp-action="Applications" asp-route-status="pending" class="btn btn-dhs-primary">
+                <i class="bi bi-file-earmark-check me-1"></i> Review Applications
+            </a>
+            <a asp-action="Rooms" class="btn btn-dhs-secondary">
+                <i class="bi bi-building-add me-1"></i> Manage Rooms
+            </a>
+            <a asp-action="Enrollments" class="btn btn-outline-secondary">
+                <i class="bi bi-person-badge me-1"></i> View Enrollments
+            </a>
+            <a asp-action="ExportEnrollments" class="btn btn-outline-secondary">
+                <i class="bi bi-download me-1"></i> Export CSV
+            </a>
+            <a asp-action="Settings" class="btn btn-outline-secondary">
+                <i class="bi bi-gear me-1"></i> System Settings
+            </a>
+        </div>
+    </div>
+</div>

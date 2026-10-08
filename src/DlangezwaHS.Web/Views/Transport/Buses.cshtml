@@ -1,0 +1,43 @@
+@model IList<Bus>
+@{ ViewData["Title"] = "Buses"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-bus-front me-2"></i>Buses</h2></div>
+    <a asp-action="BusEdit" class="btn btn-dhs-primary"><i class="bi bi-plus-circle me-1"></i>Add Bus</a>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">No buses on record yet.</div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Registration</th><th>Make / Model</th><th>Capacity</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var b in Model)
+                {
+                    <tr>
+                        <td><strong>@b.RegistrationNumber</strong></td>
+                        <td>@b.MakeModel</td>
+                        <td>@b.Capacity</td>
+                        <td>@(b.IsActive ? "Active" : "Inactive")</td>
+                        <td class="d-flex gap-1">
+                            <a asp-action="BusEdit" asp-route-id="@b.Id" class="btn btn-sm btn-dhs-primary"><i class="bi bi-pencil-square"></i></a>
+                            @if (b.IsActive)
+                            {
+                                <form asp-action="DeactivateBus" asp-route-id="@b.Id" method="post" onsubmit="return confirm('Deactivate this bus?');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i></button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

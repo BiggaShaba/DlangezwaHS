@@ -1,0 +1,114 @@
+@model RecordAttendanceViewModel
+@{ ViewData["Title"] = "Record Attendance"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Dashboard">Dashboard</a></li>
+            <li class="breadcrumb-item active">Attendance</li>
+        </ol>
+    </nav>
+    <h2><i class="bi bi-calendar-check me-2"></i>@Model.ClassName — Attendance</h2>
+    <p>@Model.Date.ToString("dddd, dd MMMM yyyy")</p>
+</div>
+
+@if (Model.AlreadyTaken)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-4">
+        <i class="bi bi-info-circle-fill fs-5"></i>
+        Attendance already recorded for today. You can update it below.
+    </div>
+}
+
+<!-- Date picker -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex align-items-center gap-3">
+            <input type="hidden" name="classId" value="@Model.ClassId" />
+            <label class="form-label mb-0 fw-semibold small">Select Date:</label>
+            <input type="date" name="date" value="@Model.Date.ToString("yyyy-MM-dd")"
+                   class="form-control form-control-sm" style="max-width:180px;" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+            <button type="submit" class="btn btn-dhs-primary btn-sm">Load</button>
+        </form>
+    </div>
+</div>
+
+<form asp-action="RecordAttendance" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="TeacherId" />
+    <input type="hidden" asp-for="ClassId" />
+    <input type="hidden" asp-for="ClassName" />
+    <input type="hidden" asp-for="Date" />
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-people me-2"></i>@Model.Learners.Count Learners</h5>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-success"
+                        onclick="setAll('Present')">All Present</button>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        onclick="setAll('Absent')">All Absent</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-dhs mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:40px;">#</th>
+                        <th>Learner</th>
+                        <th style="width:300px;">Status</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @for (int i = 0; i < Model.Learners.Count; i++)
+                {
+                    <tr>
+                        <td class="text-muted small">@(i + 1)</td>
+                        <td>
+                            <strong>@Model.Learners[i].FullName</strong>
+                            <input type="hidden" name="Learners[@i].LearnerId" value="@Model.Learners[i].LearnerId" />
+                        </td>
+                        <td>
+                            <div class="btn-group attendance-group" role="group">
+                                @foreach (var status in new[] { "Present", "Absent", "Late" })
+                                {
+                                    var selected = Model.Learners[i].Status.ToString() == status;
+                                    var css = status == "Present" ? "btn-success" : status == "Absent" ? "btn-danger" : "btn-warning";
+                                    <input type="radio" class="btn-check" autocomplete="off"
+                                           name="Learners[@i].Status" value="@status" id="s_@(i)_@status"
+                                           @(selected ? "checked" : "") />
+                                    <label class="btn btn-sm btn-outline-@(css.Replace("btn-",""))"
+                                           for="s_@(i)_@status">@status</label>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <input type="text" name="Learners[@i].Notes"
+                                   value="@Model.Learners[i].Notes"
+                                   class="form-control form-control-sm"
+                                   placeholder="Optional note…" />
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Dashboard" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+            <button type="submit" class="btn btn-dhs-primary px-4">
+                <i class="bi bi-check-circle me-1"></i>Save Attendance
+            </button>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+function setAll(status) {
+    document.querySelectorAll('input[type="radio"][value="' + status + '"]').forEach(r => r.checked = true);
+}
+</script>
+}

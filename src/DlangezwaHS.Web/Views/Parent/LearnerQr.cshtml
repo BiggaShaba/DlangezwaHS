@@ -1,0 +1,63 @@
+@model Learner
+@{ ViewData["Title"] = "Boarding QR Badge"; }
+
+<style>
+    .qr-badge { max-width: 380px; margin: 0 auto; border-radius: 28px; overflow: hidden; background: #fff; box-shadow: var(--shadow-pop); animation: qr-pop .6s cubic-bezier(.34,1.56,.64,1) both; }
+    @@keyframes qr-pop { from { opacity: 0; transform: scale(.85) rotate(-2deg); } }
+    .qr-top { padding: 1.4rem 1.4rem 3.2rem; color: #fff; text-align: center; position: relative; overflow: hidden;
+        background: linear-gradient(120deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 55%, var(--dhs-blue-dark) 100%); }
+    .qr-top::after { content: ""; position: absolute; width: 220px; height: 220px; right: -70px; top: -110px; border-radius: 50%; background: radial-gradient(circle, rgba(151,200,233,.45), transparent 70%); }
+    .qr-top .school { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dhs-blue); }
+    .qr-frame { width: 250px; height: 250px; margin: -2.6rem auto 0; border-radius: 22px; background: #fff; display: grid; place-items: center; position: relative; z-index: 1;
+        box-shadow: 0 16px 34px -18px rgba(11,42,74,.5); }
+    .qr-frame::before, .qr-frame::after { content: ""; position: absolute; width: 34px; height: 34px; border: 3px solid var(--dhs-blue-dark); }
+    .qr-frame::before { top: 8px; left: 8px; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+    .qr-frame::after { bottom: 8px; right: 8px; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+    @@media print { .dhs-navbar, .dhs-footer, .page-header, .qr-actions { display: none !important; } .qr-badge { box-shadow: none; } }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-qr-code me-2"></i>Boarding QR Badge</h2>
+        <p>Show this at the boarding gate and in the dining hall</p>
+    </div>
+    <a asp-action="LearnerOverview" asp-route-learnerId="@Model.Id" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Back</a>
+</div>
+
+<div class="qr-badge">
+    <div class="qr-top">
+        <div class="school">Dlangezwa High School · Boarding</div>
+        <div class="fw-bold fs-5 mt-1" style="position:relative;z-index:1">@Model.FullName</div>
+        <div class="small" style="color:rgba(255,255,255,.75);position:relative;z-index:1">@Model.LearnerIdNumber</div>
+    </div>
+    <div class="qr-frame"><div id="qr"></div></div>
+    <div class="p-3 text-center">
+        <div class="k-sub">Badge code</div>
+        <code class="small">@ViewBag.QrCode</code>
+    </div>
+</div>
+
+<div class="qr-actions d-flex gap-2 justify-content-center mt-4 flex-wrap">
+    <button type="button" id="downloadQr" class="k-btn k-btn-primary"><i class="bi bi-download"></i>Download PNG</button>
+    <button type="button" onclick="window.print()" class="k-btn k-btn-ghost"><i class="bi bi-printer"></i>Print</button>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+    new QRCode(document.getElementById("qr"), { text: "@ViewBag.QrCode", width: 210, height: 210, colorDark: "#0B2A4A" });
+
+    document.getElementById('downloadQr').addEventListener('click', function () {
+        const canvas = document.querySelector('#qr canvas');
+        const img = document.querySelector('#qr img');
+        const dataUrl = canvas ? canvas.toDataURL('image/png') : (img ? img.src : null);
+        if (!dataUrl) return;
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = '@(Model.FullName.Replace(" ", "_"))_QR_Badge.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+</script>
+}

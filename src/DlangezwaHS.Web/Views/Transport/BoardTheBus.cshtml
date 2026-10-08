@@ -1,0 +1,104 @@
+@model BoardTheBusViewModel
+@{ ViewData["Title"] = "Board the Bus"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-clipboard-check me-2"></i>Board the Bus</h2>
+    <p>@Model.TripLabel — @Model.Date.ToString("dddd, dd MMMM yyyy")</p>
+</div>
+
+<!-- Date picker -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex align-items-center gap-3">
+            <input type="hidden" name="tripId" value="@Model.TripId" />
+            <label class="form-label mb-0 fw-semibold small">Select Date:</label>
+            <input type="date" name="date" value="@Model.Date.ToString("yyyy-MM-dd")" class="form-control form-control-sm" style="max-width:180px;" />
+            <button type="submit" class="btn btn-dhs-primary btn-sm">Load</button>
+        </form>
+    </div>
+</div>
+
+<form asp-action="ConfirmAttendance" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="TripId" />
+    <input type="hidden" asp-for="OccurrenceId" />
+    <input type="hidden" asp-for="Date" />
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-people me-2"></i>@Model.BoardedCount / @Model.TotalCount Boarded</h5>
+            @if (!Model.ReadOnly)
+            {
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-success" onclick="setAll('Boarded')">All Boarded</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="setAll('Absent')">All Absent</button>
+                </div>
+            }
+        </div>
+        <div class="card-body p-0">
+            @if (!Model.Learners.Any())
+            {
+                <div class="p-4 text-center text-muted">No learners on this trip's roster.</div>
+            }
+            else
+            {
+                <table class="table table-dhs mb-0">
+                    <thead><tr><th style="width:40px;">#</th><th>Learner</th><th style="width:340px;">Status</th></tr></thead>
+                    <tbody>
+                    @for (int i = 0; i < Model.Learners.Count; i++)
+                    {
+                        <tr>
+                            <td class="text-muted small">@(i + 1)</td>
+                            <td>
+                                <strong>@Model.Learners[i].FullName</strong>
+                                <input type="hidden" name="Learners[@i].LearnerId" value="@Model.Learners[i].LearnerId" />
+                            </td>
+                            <td>
+                                @if (Model.ReadOnly)
+                                {
+                                    var css = Model.Learners[i].Status == BoardingStatus.Boarded ? "badge-approved" : Model.Learners[i].Status == BoardingStatus.Absent ? "badge-rejected" : "badge-pending";
+                                    <span class="badge rounded-pill @css">@Model.Learners[i].Status</span>
+                                }
+                                else
+                                {
+                                    <div class="btn-group" role="group">
+                                        @foreach (var status in new[] { "NotBoarded", "Boarded", "Absent" })
+                                        {
+                                            var selected = Model.Learners[i].Status.ToString() == status;
+                                            var css = status == "Boarded" ? "success" : status == "Absent" ? "danger" : "secondary";
+                                            <input type="radio" class="btn-check" autocomplete="off"
+                                                   name="Learners[@i].Status" value="@status" id="s_@(i)_@status"
+                                                   @(selected ? "checked" : "") />
+                                            <label class="btn btn-sm btn-outline-@css" for="s_@(i)_@status">@status</label>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </div>
+        @if (!Model.ReadOnly)
+        {
+            <div class="card-footer d-flex justify-content-between">
+                <a asp-action="Trips" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back</a>
+                <div class="d-flex gap-2">
+                    <a asp-action="ReportDelay" asp-route-tripId="@Model.TripId" asp-route-date="@Model.Date.ToString("yyyy-MM-dd")" class="btn btn-outline-warning">
+                        <i class="bi bi-clock-history me-1"></i>Report Delay
+                    </a>
+                    <button type="submit" class="btn btn-dhs-primary px-4"><i class="bi bi-check-circle me-1"></i>Confirm Attendance</button>
+                </div>
+            </div>
+        }
+    </div>
+</form>
+
+@section Scripts {
+<script>
+function setAll(status) {
+    document.querySelectorAll('input[type="radio"][value="' + status + '"]').forEach(r => r.checked = true);
+}
+</script>
+}

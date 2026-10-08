@@ -1,0 +1,610 @@
+@model MealPlanCreateViewModel
+@{
+    var isEdit = Model.Id.HasValue;
+    ViewData["Title"] = isEdit ? "Edit Meal Plan" : "Plan a Week";
+    var today = DlangezwaHS.Web.Services.SchoolClock.Today;
+    var mealTypes = Enum.GetValues<MealType>();
+    var camel = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+    var mealsJson = System.Text.Json.JsonSerializer.Serialize(Model.MealOptions, camel);
+    var itemsJson = System.Text.Json.JsonSerializer.Serialize(Model.Items.Select(i => new
+    {
+        id = i.Id, day = i.DayOfWeek, type = i.MealType.ToString(), mealId = i.MealId,
+        legacyName = i.MenuDescription, legacyIngredients = i.Ingredients, locked = i.Locked
+    }), camel);
+    var weeksJson = System.Text.Json.JsonSerializer.Serialize(Model.WeekChoices.Select(w => new
+    {
+        monday = w.Monday.ToString("yyyy-MM-dd"),
+        existingPlanId = w.ExistingPlanId,
+        url = w.ExistingPlanId is int pid ? Url.Action("MealPlanCreate", new { id = pid }) : null
+    }), camel);
+    var servingJson = System.Text.Json.JsonSerializer.Serialize(Model.ServingTimes.ToDictionary(k => k.Key.ToString(), v => v.Value));
+    string SlotIcon(MealType t) => t switch { MealType.Breakfast => "bi-sunrise", MealType.Lunch => "bi-sun", _ => "bi-moon-stars" };
+}
+
+<style>
+    /* ── Header ── */
+    .pc-header { background: linear-gradient(120deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 55%, var(--dhs-blue-dark) 100%); }
+    .pc-header::after { content: ""; position: absolute; width: 340px; height: 340px; right: -90px; top: -180px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(151,200,233,.45), transparent 70%); pointer-events: none; animation: pc-glow 10s ease-in-out infinite; }
+    @@keyframes pc-glow { 50% { transform: translate(-30px, 20px) scale(1.1); } }
+    .pc-header > * { position: relative; z-index: 1; }
+    .pc-btn-light { color: #fff; border: 1.5px solid rgba(255,255,255,.55); background: rgba(255,255,255,.08); border-radius: 10px; padding: .5rem 1.1rem; }
+    .pc-btn-light:hover, .pc-btn-light:focus-visible { color: var(--dhs-navy); background: #fff; border-color: #fff; transform: translateY(-1px); }
+
+    /* ── Notes & settings bar ── */
+    .pc-note { display: flex; align-items: flex-start; gap: .6rem; padding: .7rem 1rem; border-radius: 14px; background: var(--dhs-light); color: var(--dhs-navy); font-size: .88rem; margin-bottom: .75rem; }
+    .pc-note i { color: var(--dhs-blue-dark); margin-top: .1rem; }
+    .pc-note.warn { background: #fff7ed; color: #9a3412; }
+    .pc-note.warn i { color: #ea580c; }
+    .pc-bar { border-radius: 20px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1.1rem 1.2rem; margin-bottom: 1.25rem; }
+    .pc-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dhs-grey); margin-bottom: .35rem; display: block; }
+    .pc-input { border-radius: 12px; border: 1.5px solid #e2e8f0; padding: .55rem .8rem; transition: border-color .2s, box-shadow .2s; }
+    .pc-input:focus { border-color: var(--dhs-blue-dark); box-shadow: 0 0 0 4px rgba(151,200,233,.35); }
+    .pc-meter-top { display: flex; justify-content: space-between; font-size: .85rem; color: var(--dhs-navy); }
+    .pc-meter { height: 10px; border-radius: 99px; background: #e2e8f0; overflow: hidden; margin-top: .4rem; }
+    .pc-meter span { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--dhs-blue), var(--dhs-blue-dark));
+        transition: width .8s cubic-bezier(.16,1,.3,1), background .3s; }
+    .pc-meter.over span { background: linear-gradient(90deg, #f87171, #dc2626); }
+    .pc-meter-msg { font-size: .78rem; color: var(--dhs-grey); margin-top: .3rem; }
+    .pc-meter-msg.over { color: #b91c1c; font-weight: 600; }
+    .pc-times { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .pc-time { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .65rem; border-radius: 99px; background: var(--dhs-light); color: var(--dhs-navy); font-size: .8rem; }
+    .pc-time i { color: var(--dhs-blue-dark); }
+
+    /* ── Day tiles ── */
+    .pc-grid { transition: opacity .3s ease, filter .3s ease; }
+    .pc-grid.is-blocked { opacity: .45; filter: grayscale(.4); pointer-events: none; }
+    .pc-day { position: relative; height: 100%; border-radius: 20px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient);
+        overflow: hidden; transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; }
+    .pc-day::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; transform: scaleX(0); transform-origin: left;
+        background: linear-gradient(90deg, var(--dhs-blue), var(--dhs-blue-dark), var(--dhs-navy-mid)); transition: transform .45s var(--ease-spring); }
+    .pc-day:hover { transform: translateY(-6px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    .pc-day:hover::before, .pc-day.is-today::before { transform: scaleX(1); }
+    .pc-day.is-today { border-color: var(--dhs-blue-dark); }
+    .pc-day.is-past { background: #f8fafc; }
+    .pc-day.is-past:hover { transform: none; box-shadow: var(--shadow-ambient); border-color: #e2e8f0; }
+    .pc-day-head { display: flex; justify-content: space-between; align-items: center; padding: .9rem 1.1rem .6rem; }
+    .pc-day-name { font-weight: 700; color: var(--dhs-navy); font-size: 1.02rem; }
+    .pc-day-date { color: var(--dhs-grey); font-size: .82rem; font-weight: 500; margin-left: .3rem; }
+    .pc-copy { border: 0; background: none; color: var(--dhs-blue-dark); font-size: .78rem; font-weight: 600; padding: .2rem .4rem; border-radius: 8px; }
+    .pc-copy:hover { background: var(--dhs-light); color: var(--dhs-navy); }
+    .pc-day-body { padding: 0 1.1rem 1rem; }
+    .pc-slot { padding: .6rem .65rem; border-radius: 14px; margin-top: .35rem; transition: background .25s, box-shadow .25s; }
+    .pc-slot + .pc-slot { border-top: 1px dashed #e5e7eb; border-top-left-radius: 0; border-top-right-radius: 0; }
+    .pc-slot.slot-empty { background: #fef2f2; box-shadow: inset 0 0 0 1.5px #fca5a5; border-top-color: transparent; animation: pc-nudge .4s ease; }
+    @@keyframes pc-nudge { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+    .pc-slot-head { display: flex; align-items: center; gap: .4rem; font-size: .82rem; font-weight: 700; color: var(--dhs-navy); margin-bottom: .35rem; }
+    .pc-slot-head i { color: var(--dhs-blue-dark); }
+    .pc-slot-head .time { font-weight: 500; color: var(--dhs-grey); }
+    .slot-empty .pc-slot-head, .slot-empty .pc-slot-head i { color: #b91c1c; }
+
+    .pc-chip { display: flex; align-items: center; gap: .5rem; background: var(--dhs-light); border-radius: 12px; padding: .35rem .45rem; margin-bottom: .35rem;
+        font-size: .86rem; color: var(--dhs-navy); animation: pc-pop .35s var(--ease-spring); }
+    @@keyframes pc-pop { from { opacity: 0; transform: scale(.9); } }
+    .pc-chip img, .pc-chip .ph { width: 30px; height: 30px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+    .pc-chip .ph { display: grid; place-items: center; background: #dbeafe; color: var(--dhs-blue-dark); }
+    .pc-chip .name { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc-chip .cost { color: var(--dhs-grey); font-size: .74rem; white-space: nowrap; }
+    .pc-chip .rm { width: 26px; height: 26px; border-radius: 8px; border: 0; background: transparent; color: #94a3b8; display: grid; place-items: center; flex-shrink: 0; }
+    .pc-chip .rm:hover { background: #fee2e2; color: #dc2626; }
+    .pc-add { width: 100%; border: 1.5px dashed #cbd5e1; background: #fff; border-radius: 12px; padding: .45rem; font-size: .84rem; color: var(--dhs-navy-mid); font-weight: 600;
+        transition: border-color .2s, background .2s, color .2s; }
+    .pc-add:hover, .pc-add[aria-expanded="true"] { border-color: var(--dhs-blue-dark); background: var(--dhs-light); color: var(--dhs-navy); }
+
+    /* ── Meal picker pop-over ── */
+    .pc-picker { position: absolute; z-index: 1060; width: min(340px, calc(100vw - 24px)); background: #fff; border-radius: 18px; border: 1px solid #e2e8f0;
+        box-shadow: 0 24px 60px -20px rgba(11,42,74,.45); overflow: hidden; transform-origin: top center; animation: pc-drop .22s var(--ease-spring); }
+    @@keyframes pc-drop { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+    .pc-picker-head { padding: .75rem .85rem .5rem; border-bottom: 1px solid #f1f5f9; }
+    .pc-picker-title { font-size: .8rem; font-weight: 700; color: var(--dhs-navy); display: flex; justify-content: space-between; align-items: center; margin-bottom: .45rem; }
+    .pc-picker-title button { border: 0; background: none; color: var(--dhs-grey); width: 28px; height: 28px; border-radius: 8px; }
+    .pc-picker-title button:hover { background: #f1f5f9; }
+    .pc-search { width: 100%; border-radius: 10px; border: 1.5px solid #e2e8f0; padding: .4rem .7rem .4rem 2rem; font-size: .85rem;
+        background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398l3.85 3.85a1 1 0 0 0 1.415-1.414zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0'/%3E%3C/svg%3E") no-repeat .65rem center; }
+    .pc-search:focus { outline: none; border-color: var(--dhs-blue-dark); box-shadow: 0 0 0 3px rgba(151,200,233,.35); }
+    .pc-picker-list { max-height: 320px; overflow-y: auto; padding: .35rem; }
+    .pc-group { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dhs-grey); padding: .55rem .55rem .25rem; }
+    .pc-opt { width: 100%; display: flex; align-items: center; gap: .6rem; padding: .45rem .55rem; border: 0; border-radius: 12px; background: none; text-align: left; color: var(--dhs-navy);
+        transition: background .15s; }
+    .pc-opt:hover, .pc-opt:focus-visible { background: var(--dhs-light); outline: none; }
+    .pc-opt img, .pc-opt .ph { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+    .pc-opt .ph { display: grid; place-items: center; background: #dbeafe; color: var(--dhs-blue-dark); }
+    .pc-opt .txt { flex-grow: 1; min-width: 0; font-size: .86rem; }
+    .pc-opt .txt small { display: block; color: var(--dhs-grey); font-size: .74rem; }
+    .pc-opt .act { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; font-size: 1rem;
+        background: var(--dhs-blue); color: var(--dhs-navy); transition: transform .25s var(--ease-spring), background .2s, color .2s; }
+    .pc-opt:hover .act { transform: scale(1.12) rotate(90deg); }
+    .pc-opt.is-added { background: #f0f9ff; }
+    .pc-opt.is-added .act { background: #fee2e2; color: #dc2626; }
+    .pc-opt.is-added:hover .act { transform: scale(1.12); }
+    .pc-opt.is-locked .act { background: #f1f5f9; color: var(--dhs-grey); }
+    .pc-picker-foot { padding: .55rem .85rem; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; font-size: .8rem; color: var(--dhs-grey); }
+    .pc-empty { padding: 1.2rem; text-align: center; color: var(--dhs-grey); font-size: .85rem; }
+
+    /* ── Action bar & save button ── */
+    .pc-actions { position: sticky; bottom: 0; z-index: 20; margin-top: 1.25rem; padding: .8rem 1rem; border-radius: 18px;
+        background: rgba(255,255,255,.92); backdrop-filter: blur(10px); border: 1px solid #e2e8f0; box-shadow: 0 -10px 30px -18px rgba(11,42,74,.35);
+        display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+    .pc-summary { margin-left: auto; font-size: .85rem; color: var(--dhs-grey); }
+    .pc-summary strong { color: var(--dhs-navy); }
+    .pc-save { position: relative; overflow: hidden; border: 0; color: #fff; font-weight: 600; border-radius: 12px; padding: .6rem 1.4rem; min-width: 150px;
+        background: linear-gradient(135deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 100%); box-shadow: 0 10px 22px -10px rgba(11,42,74,.6);
+        transition: transform .25s var(--ease-spring), box-shadow .25s; }
+    .pc-save:hover { transform: translateY(-2px); box-shadow: 0 14px 26px -10px rgba(11,42,74,.7); color: #fff; }
+    .pc-save:active { transform: scale(.97); }
+    .pc-save.is-saving { cursor: progress; background: linear-gradient(110deg, var(--dhs-navy), var(--dhs-blue-dark), var(--dhs-blue), var(--dhs-navy-mid), var(--dhs-navy));
+        background-size: 300% 100%; animation: pc-flow 1.4s linear infinite; }
+    @@keyframes pc-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+    .pc-update { border-radius: 12px; padding: .6rem 1.2rem; font-weight: 600; background: var(--dhs-blue); color: var(--dhs-navy); border: 0; }
+    .pc-update:hover { background: var(--dhs-blue-dark); color: #fff; }
+    .pc-problems { border-radius: 14px; }
+
+    .modal-content { border-radius: 20px; border: 0; box-shadow: var(--shadow-pop); }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .pc-header::after, .pc-chip, .pc-picker, .pc-slot.slot-empty { animation: none; }
+        .pc-day, .pc-day::before, .pc-opt .act, .pc-meter span { transition: none; }
+        .pc-save.is-saving { animation-duration: 6s; }
+    }
+</style>
+
+<div class="page-header pc-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h2><i class="bi bi-calendar3 me-2"></i>@(isEdit ? "Edit Meal Plan" : "Plan a Week")</h2>
+        <p id="weekRangeText">Week of @Model.WeekStartDate.ToString("ddd dd MMM") – @Model.WeekStartDate.AddDays(6).ToString("ddd dd MMM yyyy")</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn pc-btn-light" data-bs-toggle="modal" data-bs-target="#newMealModal"><i class="bi bi-plus-circle me-1"></i>New Meal</button>
+        <a asp-action="Meals" class="btn pc-btn-light"><i class="bi bi-journal-richtext me-1"></i>Meal Library</a>
+    </div>
+</div>
+
+@* One short line per situation instead of several alerts *@
+@if (isEdit && Model.IsReadOnly)
+{
+    <div class="pc-note"><i class="bi bi-lock"></i><div>This week has passed — its plan can only be viewed.</div></div>
+}
+else if (isEdit && Model.IsPublished)
+{
+    <div class="pc-note"><i class="bi bi-broadcast"></i><div><strong>Published plan.</strong> New options appear to parents straight away; options that already have orders can't be removed.</div></div>
+}
+<div class="pc-note warn" id="weekTakenNote" hidden>
+    <i class="bi bi-exclamation-triangle"></i>
+    <div><strong>This week already has a meal plan.</strong> Choose an available week to start a new plan, or update the existing one — a second plan would show learners duplicate options.</div>
+</div>
+@if (!Model.MealOptions.Any())
+{
+    <div class="pc-note warn"><i class="bi bi-journal-x"></i><div>Your meal library is empty — use <strong>New Meal</strong> to add meals first.</div></div>
+}
+
+<form asp-action="MealPlanCreate" method="post" id="planForm" novalidate>
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+
+    <div class="pc-bar">
+        <div class="row g-3 align-items-end">
+            <div class="col-lg-4">
+                <label class="pc-label" for="weekSelect">Week</label>
+                @if (isEdit)
+                {
+                    <input type="hidden" asp-for="WeekStartDate" value="@Model.WeekStartDate.ToString("yyyy-MM-dd")" />
+                    <div class="form-control pc-input bg-light">@Model.WeekStartDate.ToString("ddd dd MMM") – @Model.WeekStartDate.AddDays(6).ToString("ddd dd MMM yyyy")</div>
+                }
+                else
+                {
+                    <select name="WeekStartDate" id="weekSelect" class="form-select pc-input">
+                        @foreach (var w in Model.WeekChoices)
+                        {
+                            <option value="@w.Monday.ToString("yyyy-MM-dd")" selected="@(w.Monday == Model.WeekStartDate)">
+                                @w.Label@(w.ExistingPlanId.HasValue ? " · already planned" : "")
+                            </option>
+                        }
+                    </select>
+                }
+            </div>
+            <div class="col-sm-5 col-lg-2">
+                <label class="pc-label" for="budgetInput">Weekly budget</label>
+                <div class="input-group">
+                    <span class="input-group-text" style="border-radius:12px 0 0 12px">R</span>
+                    <input asp-for="TotalBudget" type="number" step="0.01" min="0.01" class="form-control pc-input" style="border-radius:0 12px 12px 0" id="budgetInput" required />
+                </div>
+            </div>
+            <div class="col-sm-7 col-lg-3">
+                <span class="pc-label">Estimated cost</span>
+                <div class="pc-meter-top"><strong id="estText">R0.00</strong><span id="pctText" class="text-muted"></span></div>
+                <div class="pc-meter" id="meter"><span id="meterFill"></span></div>
+                <div class="pc-meter-msg" id="meterMsg">For @Model.ExpectedDiners learners per meal</div>
+            </div>
+            <div class="col-lg-3">
+                <span class="pc-label">Serving times</span>
+                <div class="pc-times">
+                    @foreach (var t in mealTypes)
+                    {
+                        <span class="pc-time"><i class="bi @SlotIcon(t)"></i>@t @Model.ServingTimes.GetValueOrDefault(t)</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 pc-grid" id="dayGrid">
+        @foreach (var d in Enumerable.Range(1, 7))
+        {
+            <div class="col-md-6 col-xl-4">
+                <div class="pc-day" data-day-card="@d">
+                    <div class="pc-day-head">
+                        <div>
+                            <span class="pc-day-name">@System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.DayNames[d % 7]</span><span class="pc-day-date" data-day-date></span>
+                            <span class="badge bg-primary ms-1" data-today-badge hidden>Today</span>
+                            <span class="badge bg-secondary ms-1" data-past-badge hidden><i class="bi bi-lock"></i> Passed</span>
+                        </div>
+                        <button type="button" class="pc-copy" data-copy hidden title="Copy this day's meals to the remaining weekdays"><i class="bi bi-copy me-1"></i>Copy to weekdays</button>
+                    </div>
+                    <div class="pc-day-body">
+                        @foreach (var t in mealTypes)
+                        {
+                            <div class="pc-slot" data-slot data-day="@d" data-type="@t">
+                                <div class="pc-slot-head"><i class="bi @SlotIcon(t)"></i>@t <span class="time">· @Model.ServingTimes.GetValueOrDefault(t)</span></div>
+                                <div data-chips></div>
+                                <button type="button" class="pc-add" data-add aria-haspopup="dialog" aria-expanded="false"><i class="bi bi-plus-lg me-1"></i>Add meal</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="alert alert-danger small mt-3 pc-problems" id="planProblems" @(ViewData.ModelState.IsValid ? "hidden" : "")>
+        @foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+        {
+            <div><i class="bi bi-x-circle me-1"></i>@e.ErrorMessage</div>
+        }
+    </div>
+
+    <div class="pc-actions">
+        <a asp-action="MealPlan" class="btn btn-outline-secondary" style="border-radius:12px"><i class="bi bi-arrow-left me-1"></i>Back</a>
+        <span class="pc-summary" id="planSummary"></span>
+        <a class="btn pc-update" id="updateExisting" hidden><i class="bi bi-pencil-square me-1"></i>Update Existing Plan</a>
+        <button type="submit" class="pc-save" id="saveBtn">
+            <span data-label>@(isEdit ? (Model.IsPublished ? "Save Changes" : "Save Draft") : "Save Draft")</span>
+        </button>
+    </div>
+</form>
+
+<!-- Meal picker (one shared pop-over, moved next to whichever "Add meal" button opened it) -->
+<div class="pc-picker" id="mealPicker" role="dialog" aria-label="Choose meals" hidden>
+    <div class="pc-picker-head">
+        <div class="pc-picker-title"><span id="pickerTitle"></span><button type="button" id="pickerClose" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
+        <input type="search" class="pc-search" id="pickerSearch" placeholder="Search meals…" aria-label="Search meals" autocomplete="off" />
+    </div>
+    <div class="pc-picker-list" id="pickerList"></div>
+    <div class="pc-picker-foot"><span id="pickerCount"></span><button type="button" class="btn btn-sm btn-dhs-secondary" id="pickerDone" style="border-radius:10px">Done</button></div>
+</div>
+
+<!-- Create a meal without leaving the plan -->
+<div class="modal fade" id="newMealModal" tabindex="-1" aria-labelledby="newMealTitle">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="newMealForm" asp-action="SaveMeal" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title" id="newMealTitle">New Meal</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger small py-2" id="newMealError" hidden></div>
+                    <partial name="_MealForm" model="new MealEditViewModel { IngredientOptions = Model.IngredientOptions }" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-dhs-primary" id="newMealSave">Save Meal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const meals = @Html.Raw(mealsJson);
+    let items = @Html.Raw(itemsJson);
+    const weeks = @Html.Raw(weeksJson);
+    const servingTimes = @Html.Raw(servingJson);
+    const isEdit = @(isEdit ? "true" : "false");
+    const isPublished = @(Model.IsPublished ? "true" : "false");
+    const diners = @Model.ExpectedDiners;
+    const todayIso = '@today.ToString("yyyy-MM-dd")';
+    let mondayIso = '@Model.WeekStartDate.ToString("yyyy-MM-dd")';
+
+    const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const TYPES = ['Breakfast', 'Lunch', 'Dinner'];
+    const mealById = id => meals.find(m => m.id === id);
+    const fmt = n => 'R' + Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const parse = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+    const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() + n); return d; };
+    const short = d => d.toLocaleDateString('en-ZA', { day: '2-digit', month: 'short' });
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    let firstEditableDay = 1;
+    let blockedByExisting = false;   // chosen week already has a plan (new plans only)
+    let attemptedSave = false;       // empty serving times only turn red after a save attempt
+    const readOnly = () => firstEditableDay > 7;
+
+    // 1–7 = first day that can still change; 8 = the whole week has passed
+    function computeFirstEditable() {
+        const today = parse(todayIso), monday = parse(mondayIso);
+        if (today < monday) return 1;
+        const days = Math.round((today - monday) / 86400000);
+        return days > 6 ? 8 : days + 1;
+    }
+
+    // ── Week (dates, past days, "already planned") — updates live when the week changes ──
+    function applyWeek() {
+        firstEditableDay = computeFirstEditable();
+        const monday = parse(mondayIso), today = parse(todayIso);
+        document.getElementById('weekRangeText').textContent =
+            `Week of ${monday.toLocaleDateString('en-ZA', { weekday: 'short', day: '2-digit', month: 'short' })} – ${addDays(monday, 6).toLocaleDateString('en-ZA', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}`;
+
+        document.querySelectorAll('[data-day-card]').forEach(card => {
+            const d = Number(card.dataset.dayCard), date = addDays(monday, d - 1);
+            const past = d < firstEditableDay;
+            card.querySelector('[data-day-date]').textContent = '· ' + short(date);
+            card.classList.toggle('is-today', date.getTime() === today.getTime());
+            card.classList.toggle('is-past', past);
+            card.querySelector('[data-today-badge]').hidden = date.getTime() !== today.getTime();
+            card.querySelector('[data-past-badge]').hidden = !past;
+            card.querySelector('[data-copy]').hidden = readOnly() || d !== firstEditableDay || d > 5;
+            card.querySelectorAll('[data-add]').forEach(b => b.hidden = past);
+        });
+
+        // New plans: options on days that have now passed can't be kept
+        if (!isEdit) items = items.filter(i => i.day >= firstEditableDay);
+
+        const choice = isEdit ? null : weeks.find(w => w.monday === mondayIso);
+        blockedByExisting = !!(choice && choice.existingPlanId);
+        document.getElementById('weekTakenNote').hidden = !blockedByExisting;
+        document.getElementById('dayGrid').classList.toggle('is-blocked', blockedByExisting);
+        const update = document.getElementById('updateExisting');
+        update.hidden = !blockedByExisting;
+        if (blockedByExisting) update.href = choice.url;
+        const save = document.getElementById('saveBtn');
+        save.hidden = blockedByExisting || readOnly();
+        save.querySelector('[data-label]').textContent = isEdit ? (isPublished ? 'Save Changes' : 'Save Draft') : 'Save Draft';
+        closePicker();
+        render();
+    }
+
+    document.getElementById('weekSelect')?.addEventListener('change', e => { mondayIso = e.target.value; applyWeek(); });
+
+    // Weekly cost: each day/meal costs the average of its options × learners eating
+    function weekCost() {
+        const slots = {};
+        items.forEach(i => {
+            const meal = i.mealId ? mealById(i.mealId) : null;
+            (slots[i.day + '-' + i.type] = slots[i.day + '-' + i.type] || []).push(meal ? meal.costPerServing : 0);
+        });
+        return Object.values(slots).reduce((s, c) => s + c.reduce((a, b) => a + b, 0) / c.length, 0) * diners;
+    }
+
+    function missingSlots() {
+        const missing = [];
+        for (let d = firstEditableDay; d <= 7; d++)
+            TYPES.forEach(t => { if (!items.some(i => i.day === d && i.type === t)) missing.push(`${DAY_NAMES[d]} ${t}`); });
+        return missing;
+    }
+
+    // ── Chips, budget meter and summary ──
+    function render() {
+        document.querySelectorAll('[data-slot]').forEach(slot => {
+            const day = Number(slot.dataset.day), type = slot.dataset.type;
+            const box = slot.querySelector('[data-chips]');
+            box.innerHTML = '';
+            items.forEach((it, idx) => {
+                if (it.day !== day || it.type !== type) return;
+                const meal = it.mealId ? mealById(it.mealId) : null;
+                const name = meal ? meal.name : it.legacyName;
+                const locked = it.locked || it.day < firstEditableDay || readOnly();
+                const chip = document.createElement('div');
+                chip.className = 'pc-chip';
+                chip.innerHTML =
+                    (meal && meal.imageUrl ? `<img src="${esc(meal.imageUrl)}" alt="">` : `<span class="ph"><i class="bi bi-egg-fried"></i></span>`) +
+                    `<span class="name" title="${esc(name)}">${esc(name)}</span>` +
+                    (meal ? `<span class="cost">${fmt(meal.costPerServing)}</span>` : '') +
+                    (locked
+                        ? `<i class="bi bi-lock text-muted px-1" title="${it.day < firstEditableDay ? 'This day has passed' : 'Learners have already ordered this option'}"></i>`
+                        : `<button type="button" class="rm" aria-label="Remove ${esc(name)}"><i class="bi bi-x-lg"></i></button>`);
+                chip.querySelector('.rm')?.addEventListener('click', () => { items.splice(idx, 1); render(); refreshPicker(); });
+                box.appendChild(chip);
+            });
+            const count = items.filter(i => i.day === day && i.type === type).length;
+            const add = slot.querySelector('[data-add]');
+            add.innerHTML = `<i class="bi bi-plus-lg me-1"></i>${count ? 'Add another option' : 'Add meal'}`;
+            slot.classList.toggle('slot-empty', attemptedSave && day >= firstEditableDay && count === 0);
+        });
+
+        const total = weekCost();
+        const budget = Number(document.getElementById('budgetInput').value || 0);
+        const over = budget > 0 && total > budget;
+        const pct = budget > 0 ? Math.min(100, total / budget * 100) : 0;
+        document.getElementById('estText').textContent = fmt(total);
+        document.getElementById('pctText').textContent = budget > 0 ? `${(total / budget * 100).toFixed(0)}% of ${fmt(budget)}` : 'No budget';
+        document.getElementById('meter').classList.toggle('over', over);
+        document.getElementById('meterFill').style.width = pct + '%';
+        const msg = document.getElementById('meterMsg');
+        msg.classList.toggle('over', over);
+        msg.textContent = over ? `Over budget by ${fmt(total - budget)} — can't be saved` : `For ${diners} learners per meal`;
+
+        const filled = 21 - missingSlots().length - (firstEditableDay - 1) * 3;
+        const open = (8 - firstEditableDay) * 3;
+        document.getElementById('planSummary').innerHTML =
+            `<strong>${items.length}</strong> option(s) · <strong>${Math.max(0, filled)}</strong> of ${open} serving times filled`;
+    }
+    document.getElementById('budgetInput').addEventListener('input', render);
+
+    // ── Meal picker ──
+    const picker = document.getElementById('mealPicker');
+    const pickerList = document.getElementById('pickerList');
+    const pickerSearch = document.getElementById('pickerSearch');
+    let pickerSlot = null, pickerButton = null;
+
+    function openPicker(btn) {
+        const slot = btn.closest('[data-slot]');
+        if (pickerButton === btn && !picker.hidden) { closePicker(); return; }
+        closePicker();
+        pickerSlot = { day: Number(slot.dataset.day), type: slot.dataset.type };
+        pickerButton = btn;
+        btn.setAttribute('aria-expanded', 'true');
+        document.getElementById('pickerTitle').textContent = `${DAY_NAMES[pickerSlot.day]} · ${pickerSlot.type}`;
+        pickerSearch.value = '';
+        picker.hidden = false;
+        positionPicker();
+        refreshPicker();
+        pickerSearch.focus();
+    }
+    function positionPicker() {
+        if (!pickerButton || picker.hidden) return;
+        const r = pickerButton.getBoundingClientRect();
+        const width = picker.offsetWidth;
+        let left = r.left + window.scrollX + r.width / 2 - width / 2;
+        left = Math.max(12 + window.scrollX, Math.min(left, window.scrollX + document.documentElement.clientWidth - width - 12));
+        picker.style.left = left + 'px';
+        picker.style.top = (r.bottom + window.scrollY + 8) + 'px';
+    }
+    function closePicker(returnFocus) {
+        if (picker.hidden) return;
+        picker.hidden = true;
+        pickerButton?.setAttribute('aria-expanded', 'false');
+        if (returnFocus) pickerButton?.focus({ preventScroll: true });
+        pickerButton = null; pickerSlot = null;
+    }
+    function refreshPicker() {
+        if (picker.hidden || !pickerSlot) return;
+        const q = pickerSearch.value.trim().toLowerCase();
+        const inSlot = items.filter(i => i.day === pickerSlot.day && i.type === pickerSlot.type);
+        const shown = meals.filter(m => (m.isActive || inSlot.some(i => i.mealId === m.id)) && (!q || m.name.toLowerCase().includes(q)));
+        const groups = [[`${pickerSlot.type} meals`, shown.filter(m => m.mealType === pickerSlot.type)], ['Other meals', shown.filter(m => m.mealType !== pickerSlot.type)]];
+        pickerList.innerHTML = shown.length ? '' : `<div class="pc-empty">No meals match “${esc(pickerSearch.value)}”.</div>`;
+        groups.forEach(([label, list]) => {
+            if (!list.length) return;
+            const g = document.createElement('div'); g.className = 'pc-group'; g.textContent = label; pickerList.appendChild(g);
+            list.forEach(m => {
+                const entry = inSlot.find(i => i.mealId === m.id);
+                const locked = entry && (entry.locked || entry.day < firstEditableDay);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'pc-opt' + (entry ? ' is-added' : '') + (locked ? ' is-locked' : '');
+                btn.setAttribute('aria-pressed', entry ? 'true' : 'false');
+                btn.setAttribute('aria-label', `${entry ? 'Remove' : 'Add'} ${m.name}`);
+                btn.innerHTML =
+                    (m.imageUrl ? `<img src="${esc(m.imageUrl)}" alt="">` : `<span class="ph"><i class="bi bi-egg-fried"></i></span>`) +
+                    `<span class="txt">${esc(m.name)}<small>${fmt(m.costPerServing)} per serving</small></span>` +
+                    `<span class="act" aria-hidden="true"><i class="bi ${locked ? 'bi-lock' : entry ? 'bi-x-lg' : 'bi-plus-lg'}"></i></span>`;
+                btn.addEventListener('click', () => {
+                    if (locked) return;
+                    if (entry) items.splice(items.indexOf(entry), 1);
+                    else items.push({ id: null, day: pickerSlot.day, type: pickerSlot.type, mealId: m.id });
+                    render(); refreshPicker();
+                });
+                pickerList.appendChild(btn);
+            });
+        });
+        document.getElementById('pickerCount').textContent = `${inSlot.length} selected`;
+        positionPicker();
+    }
+
+    document.addEventListener('click', e => {
+        const add = e.target.closest('[data-add]');
+        if (add) { openPicker(add); return; }
+        if (!picker.hidden && !e.composedPath().includes(picker)) closePicker();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closePicker(true); });
+    pickerSearch.addEventListener('input', refreshPicker);
+    document.getElementById('pickerClose').addEventListener('click', () => closePicker(true));
+    document.getElementById('pickerDone').addEventListener('click', () => closePicker(true));
+    window.addEventListener('resize', positionPicker);
+
+    // ── Copy the first editable day to the remaining weekdays ──
+    document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('click', () => {
+        const source = items.filter(i => i.day === firstEditableDay && i.mealId);
+        if (!source.length) return;
+        for (let d = firstEditableDay + 1; d <= 5; d++)
+            source.forEach(m => {
+                if (!items.some(i => i.day === d && i.type === m.type && i.mealId === m.mealId))
+                    items.push({ id: null, day: d, type: m.type, mealId: m.mealId });
+            });
+        render();
+    }));
+
+    // ── Save ──
+    document.getElementById('planForm').addEventListener('submit', e => {
+        const form = e.target, save = document.getElementById('saveBtn');
+        if (blockedByExisting) { e.preventDefault(); return; }
+        attemptedSave = true;
+        render();
+
+        const problems = [];
+        const missing = missingSlots();
+        if (missing.length) problems.push(`Add at least one meal to every serving time. Missing: ${missing.join(', ')}.`);
+        const budget = Number(document.getElementById('budgetInput').value || 0), total = weekCost();
+        if (budget <= 0) problems.push('Enter a weekly budget greater than R0.');
+        else if (total > budget) problems.push(`The estimated cost (${fmt(total)}) is more than the weekly budget (${fmt(budget)}).`);
+
+        const box = document.getElementById('planProblems');
+        box.hidden = problems.length === 0;
+        box.innerHTML = problems.map(p => `<div><i class="bi bi-x-circle me-1"></i>${esc(p)}</div>`).join('');
+        if (problems.length) {
+            e.preventDefault();
+            (document.querySelector('.slot-empty') || box).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        // Moving gradient while the plan is being saved
+        save.classList.add('is-saving');
+        save.disabled = true;
+        save.querySelector('[data-label]').innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…';
+
+        form.querySelectorAll('.item-field').forEach(el => el.remove());
+        items.forEach((it, i) => {
+            const add = (name, value) => {
+                if (value === null || value === undefined) return;
+                const input = document.createElement('input');
+                input.type = 'hidden'; input.className = 'item-field';
+                input.name = `Items[${i}].${name}`; input.value = value;
+                form.appendChild(input);
+            };
+            add('Id', it.id); add('Locked', it.locked ? 'true' : null); add('DayOfWeek', it.day); add('MealType', it.type); add('MealId', it.mealId);
+            if (!it.mealId) { add('MenuDescription', it.legacyName); add('Ingredients', it.legacyIngredients); }
+        });
+    });
+    // Coming back with the browser's back button: reset the button
+    window.addEventListener('pageshow', () => {
+        const save = document.getElementById('saveBtn');
+        save.classList.remove('is-saving'); save.disabled = false;
+        save.querySelector('[data-label]').textContent = isEdit ? (isPublished ? 'Save Changes' : 'Save Draft') : 'Save Draft';
+    });
+
+    // ── New meal (AJAX) ──
+    document.getElementById('newMealForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const form = e.target, err = document.getElementById('newMealError'), btn = document.getElementById('newMealSave');
+        err.hidden = true; btn.disabled = true;
+        try {
+            const res = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json();
+            if (!data.success) { err.textContent = data.message; err.hidden = false; return; }
+            meals.push(data.meal);
+            form.reset();
+            form.querySelector('[data-meal-form]').resetImagePreview?.();
+            bootstrap.Modal.getInstance(document.getElementById('newMealModal')).hide();
+            render();
+        } catch {
+            err.textContent = 'Could not save the meal. Please try again.'; err.hidden = false;
+        } finally { btn.disabled = false; }
+    });
+
+    applyWeek();
+})();
+</script>
+}

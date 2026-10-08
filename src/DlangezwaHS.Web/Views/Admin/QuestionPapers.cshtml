@@ -1,0 +1,179 @@
+﻿@model List<DlangezwaHS.Web.Models.Domain.QuestionPaper>
+@{
+    ViewData["Title"] = "Review Question Paper";
+}
+
+<div class="mb-4">
+    <a asp-action="QuestionPapers" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to List
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-exclamation-triangle me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+    @foreach (var paper in Model)
+ {
+    <!-- Paper details -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-file-earmark-text me-2"></i>@paper.Title</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Subject</dt>
+                    <dd class="col-sm-8">@paper.Subject?.Name</dd>
+
+                    <dt class="col-sm-4">Grade</dt>
+                        <dd class="col-sm-8">@paper.Grade?.Name</dd>
+
+                    <dt class="col-sm-4">Term</dt>
+                        <dd class="col-sm-8">@paper.Term</dd>
+
+                    <dt class="col-sm-4">Academic Year</dt>
+                        <dd class="col-sm-8">@paper.AcademicYear</dd>
+
+                    <dt class="col-sm-4">Paper Type</dt>
+                        <dd class="col-sm-8"><span class="badge bg-secondary">@paper.PaperType</span></dd>
+
+                    <dt class="col-sm-4">File</dt>
+                    <dd class="col-sm-8">
+                            @paper.OriginalFileName
+                            <span class="text-muted small ms-2">(@((paper.FileSizeBytes / 1024.0).ToString("F1")) KB)</span>
+                    </dd>
+
+                    <dt class="col-sm-4">Uploaded By</dt>
+                        <dd class="col-sm-8">@(paper.UploadedByTeacher?.FullName ?? "—")</dd>
+
+                    <dt class="col-sm-4">Uploaded At</dt>
+                        <dd class="col-sm-8">@paper.UploadedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</dd>
+
+                    <dt class="col-sm-4">Expires</dt>
+                        <dd class="col-sm-8 text-muted small">@paper.ExpiresAt.ToLocalTime().ToString("dd MMM yyyy") (auto-deleted after 3 years)</dd>
+
+                        @if (paper.Status == QuestionPaperStatus.Rejected && paper.RejectionReason != null)
+                    {
+                        <dt class="col-sm-4 text-danger">Rejection Reason</dt>
+                            <dd class="col-sm-8 text-danger">@paper.RejectionReason</dd>
+                    }
+                        @if (paper.IsReleased && paper.ReleasedAt.HasValue)
+                    {
+                        <dt class="col-sm-4 text-info">Released At</dt>
+                            <dd class="col-sm-8">@paper.ReleasedAt.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm")</dd>
+                    }
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="col-lg-5">
+
+        <!-- Download preview -->
+        <div class="card mb-3">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-download me-2"></i>File Preview / Download</h6></div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Download the file to review it before approving.</p>
+                <a asp-controller="QuestionPapers" asp-action="Download" asp-route-id="@paper.Id"
+                   class="btn btn-outline-primary w-100" target="_blank">
+                    <i class="bi bi-file-earmark-arrow-down me-2"></i>Download @((paper.OriginalFileName != null && paper.OriginalFileName.Contains("."))
+                                        ? paper.OriginalFileName.Split('.').Last().ToUpper()
+                                        : "")
+                </a>
+            </div>
+        </div>
+
+        <!-- Status badge -->
+        <div class="card mb-3">
+            <div class="card-body text-center py-3">
+                @switch (paper.Status)
+                {
+                    case QuestionPaperStatus.Pending:
+                        <span class="badge bg-warning text-dark fs-6 px-3 py-2"><i class="bi bi-clock me-2"></i>Pending Review</span>
+                        break;
+                    case QuestionPaperStatus.Approved:
+                        <span class="badge bg-success fs-6 px-3 py-2"><i class="bi bi-check-circle me-2"></i>Approved — Ready to Release</span>
+                        break;
+                    case QuestionPaperStatus.Released:
+                        <span class="badge bg-info fs-6 px-3 py-2"><i class="bi bi-send me-2"></i>Released to Learners</span>
+                        break;
+                    case QuestionPaperStatus.Rejected:
+                        <span class="badge bg-danger fs-6 px-3 py-2"><i class="bi bi-x-circle me-2"></i>Rejected</span>
+                        break;
+                }
+            </div>
+        </div>
+
+        <!-- Approve action -->
+            @if (paper.Status == QuestionPaperStatus.Pending)
+        {
+            <div class="card mb-3 border-success">
+                <div class="card-header bg-success text-white"><h6 class="mb-0"><i class="bi bi-check-circle me-2"></i>Approve Paper</h6></div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">Approving marks this paper as reviewed. You can then release it to make it visible to learners.</p>
+                        <form method="post" asp-action="ApproveQuestionPaper" asp-route-id="@paper.Id">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-success w-100"
+                                onclick="return confirm('Approve this question paper?')">
+                            <i class="bi bi-check-circle me-2"></i>Approve
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        <!-- Release action -->
+            @if (paper.Status == QuestionPaperStatus.Approved)
+        {
+            <div class="card mb-3 border-info">
+                <div class="card-header bg-info text-white"><h6 class="mb-0"><i class="bi bi-send me-2"></i>Release Paper</h6></div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">Releasing makes the paper downloadable by all teachers and enrolled learners.</p>
+                        <form method="post" asp-action="ReleaseQuestionPaper" asp-route-id="@paper.Id">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-info text-white w-100"
+                                onclick="return confirm('Release this paper to all teachers and learners?')">
+                            <i class="bi bi-send me-2"></i>Release to Learners
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        <!-- Reject action -->
+            @if (paper.Status == QuestionPaperStatus.Pending || paper.Status == QuestionPaperStatus.Approved)
+        {
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white"><h6 class="mb-0"><i class="bi bi-x-circle me-2"></i>Reject Paper</h6></div>
+                <div class="card-body">
+                        <form method="post" asp-action="RejectQuestionPaper" asp-route-id="@paper.Id">
+                        @Html.AntiForgeryToken()
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Rejection Reason <span class="text-danger">*</span></label>
+                            <textarea name="reason" class="form-control form-control-sm" rows="3"
+                                  placeholder="Explain why this paper is being rejected…" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="bi bi-x-circle me-2"></i>Reject Paper
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+ }
+</div>

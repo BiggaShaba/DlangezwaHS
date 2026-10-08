@@ -1,0 +1,161 @@
+@model BoardingDashboardViewModel
+@{
+    ViewData["Title"] = "Check-In / Out Scanner";
+    var overdue = Model.CurrentlyOut.Count(r => r.IsLate);
+}
+
+<style>
+    .bs-reader-wrap { position: relative; border-radius: 22px; overflow: hidden; background: #0b1220; min-height: 300px; box-shadow: var(--shadow-ambient); }
+    #reader { min-height: 300px; }
+    #reader video { object-fit: cover; }
+    .bs-frame { position: absolute; inset: 14%; border-radius: 18px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(11,18,32,.35); border: 2px solid rgba(151,200,233,.85); }
+    .bs-line { position: absolute; left: 16%; right: 16%; height: 2px; top: 16%; pointer-events: none;
+        background: linear-gradient(90deg, transparent, var(--dhs-blue), transparent); box-shadow: 0 0 12px var(--dhs-blue); animation: bs-scan 2.4s ease-in-out infinite; }
+    @@keyframes bs-scan { 50% { top: 84%; } }
+    .bs-result { border-radius: 22px; padding: 1.5rem; border: 2px solid #e2e8f0; background: #fff; min-height: 300px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+        text-align: center; box-shadow: var(--shadow-ambient); transition: border-color .3s, background .3s; }
+    .bs-result.out { border-color: var(--k-lunch); background: #f0f9ff; }
+    .bs-result.in { border-color: #10b981; background: #ecfdf5; }
+    .bs-result.late { border-color: #f59e0b; background: #fffbeb; }
+    .bs-result.bad { border-color: #ef4444; background: #fef2f2; }
+    .bs-result.pop { animation: bs-pop .45s cubic-bezier(.34,1.56,.64,1); }
+    @@keyframes bs-pop { from { transform: scale(.94); } }
+    .bs-icon { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-size: 2.2rem; color: #fff; margin-bottom: .8rem; background: var(--dhs-blue-dark); }
+    .bs-result.out .bs-icon { background: var(--k-lunch); } .bs-result.in .bs-icon { background: #10b981; }
+    .bs-result.late .bs-icon { background: #f59e0b; } .bs-result.bad .bs-icon { background: #ef4444; }
+    .bs-name { font-size: 1.6rem; font-weight: 800; color: var(--dhs-navy); line-height: 1.2; }
+    .bs-kind { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: .2rem; }
+    .bs-log-item { display: flex; align-items: center; gap: .7rem; padding: .6rem .75rem; border-radius: 14px; animation: k-rise .4s var(--ease-spring) both; }
+    .bs-log-item:hover { background: var(--dhs-light); }
+    .bs-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .bs-bump { animation: bs-bump .5s cubic-bezier(.34,1.56,.64,1); }
+    @@keyframes bs-bump { 40% { transform: scale(1.25); } }
+    @@media (prefers-reduced-motion: reduce) { .bs-line, .bs-result.pop, .bs-bump, .bs-log-item { animation: none; } }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-qr-code-scan me-2"></i>Check-In / Out</h2>
+        <p>Scan a learner's boarding badge — leaving needs approved leave for today; returns after the expected time are flagged late</p>
+    </div>
+    <a asp-action="Dashboard" class="k-btn k-btn-light"><i class="bi bi-speedometer2"></i>Dashboard</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-house-check"></i>In now</div><div class="k-stat-value" id="statIn" data-count="@Math.Max(0, Model.TotalBoarders - Model.CurrentlyOut.Count)">@Math.Max(0, Model.TotalBoarders - Model.CurrentlyOut.Count)</div><div class="k-stat-note">of @Model.TotalBoarders boarders</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-box-arrow-right"></i>Out now</div><div class="k-stat-value" id="statOut" data-count="@Model.CurrentlyOut.Count">@Model.CurrentlyOut.Count</div><div class="k-stat-note">on approved leave</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-alarm"></i>Overdue</div><div class="k-stat-value" data-count="@overdue">@overdue</div><div class="k-stat-note">past their return time</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-upc-scan"></i>Scanned</div><div class="k-stat-value" id="statScans">0</div><div class="k-stat-note">on this screen</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6 k-rise" style="--i:4">
+        <div class="bs-reader-wrap">
+            <div id="reader"></div>
+            <div class="bs-frame" aria-hidden="true"></div>
+            <div class="bs-line" aria-hidden="true"></div>
+        </div>
+        <div class="input-group mt-2">
+            <input type="text" id="manualHash" class="form-control k-input" style="border-radius:12px 0 0 12px !important" placeholder="Or type / paste the badge code…" aria-label="Badge code" />
+            <button class="k-btn k-btn-primary" style="border-radius:0 12px 12px 0" id="manualCheck">Check</button>
+        </div>
+    </div>
+    <div class="col-md-6 k-rise" style="--i:5">
+        <div class="bs-result" id="resultBox" aria-live="polite">
+            <div class="bs-icon" id="resultIcon"><i class="bi bi-person-badge"></i></div>
+            <div class="bs-kind" id="resultKind" style="color:var(--dhs-grey)">Ready</div>
+            <div class="bs-name" id="resultName">Scan a badge</div>
+            <div class="k-sub mt-1" id="resultMsg">Hold the learner's boarding badge up to the camera.</div>
+        </div>
+    </div>
+</div>
+
+<div class="k-card mt-3 k-rise" style="--i:6">
+    <div class="k-card-head">
+        <div><h3 class="k-title">Recent scans</h3><p class="k-sub">From this session, newest first</p></div>
+        <a asp-action="MovementLog" class="k-btn k-btn-ghost k-btn-sm"><i class="bi bi-list-ul"></i>Full movement log</a>
+    </div>
+    <div id="scanLog"><p class="k-sub mb-0" id="logEmpty">No scans yet.</p></div>
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script>
+        const TOKEN = '@Html.AntiForgeryToken()'.match(/value="([^"]+)"/)?.[1] || '';
+        let lastHash = '', scanLock = false, scans = 0;
+
+        if (typeof Html5Qrcode !== 'undefined') {
+            const html5QrCode = new Html5Qrcode("reader");
+            Html5Qrcode.getCameras().then(cameras => {
+                if (!cameras.length) return;
+                const cam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+                html5QrCode.start(cam.id, { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 }, onScanSuccess, () => {}).catch(() => {});
+            }).catch(() => {});
+        }
+
+        function onScanSuccess(decodedText) {
+            if (scanLock || decodedText === lastHash) return;
+            lastHash = decodedText; scanLock = true;
+            setTimeout(() => { scanLock = false; lastHash = ''; }, 3000);
+            processHash(decodedText);
+        }
+        document.getElementById('manualCheck').addEventListener('click', () => processHash(document.getElementById('manualHash').value));
+        document.getElementById('manualHash').addEventListener('keydown', e => { if (e.key === 'Enter') processHash(e.target.value); });
+
+        async function processHash(hash) {
+            hash = (hash || '').trim();
+            if (!hash) return;
+            const fd = new FormData();
+            fd.append('hash', hash);
+            fd.append('__RequestVerificationToken', TOKEN);
+            const res = await fetch('@Url.Action("ProcessScan", "Boarding")', { method: 'POST', body: fd });
+            const data = await res.json();
+            showResult(data);
+            addLogEntry(data, hash);
+            document.getElementById('manualHash').value = '';
+        }
+
+        // Check-outs say "Expected back…"; check-ins say "Checked in…"
+        function kindOf(d) {
+            if (!d.isValid) return 'bad';
+            if (/checked out/i.test(d.message)) return 'out';
+            return d.status === 'Late' ? 'late' : 'in';
+        }
+        const LABELS = { out: ['Checked out', 'bi-box-arrow-right'], in: ['Checked in', 'bi-house-check'], late: ['Checked in late', 'bi-alarm'], bad: ['Scan rejected', 'bi-x-lg'] };
+
+        function bump(id, delta) {
+            const el = document.getElementById(id);
+            el.textContent = Math.max(0, Number(el.textContent) + delta);
+            el.classList.remove('bs-bump'); void el.offsetWidth; el.classList.add('bs-bump');
+        }
+
+        function showResult(d) {
+            const kind = kindOf(d), box = document.getElementById('resultBox');
+            box.className = 'bs-result ' + kind;
+            void box.offsetWidth; box.classList.add('pop');
+            document.getElementById('resultIcon').innerHTML = `<i class="bi ${LABELS[kind][1]}"></i>`;
+            document.getElementById('resultKind').textContent = LABELS[kind][0];
+            document.getElementById('resultKind').style.color = '';
+            document.getElementById('resultName').textContent = d.learnerName || 'Unknown badge';
+            document.getElementById('resultMsg').textContent = d.message;
+            bump('statScans', 1);
+            if (kind === 'out') { bump('statOut', 1); bump('statIn', -1); }
+            if (kind === 'in' || kind === 'late') { bump('statOut', -1); bump('statIn', 1); }
+        }
+
+        function addLogEntry(d, hash) {
+            const kind = kindOf(d), log = document.getElementById('scanLog');
+            document.getElementById('logEmpty')?.remove();
+            const colors = { out: '#0ea5e9', in: '#10b981', late: '#f59e0b', bad: '#ef4444' };
+            const row = document.createElement('div');
+            row.className = 'bs-log-item';
+            row.innerHTML = `<span class="bs-dot" style="background:${colors[kind]}"></span>
+                <div class="flex-grow-1"><div class="fw-semibold" style="color:var(--dhs-navy)"></div><div class="k-sub"></div></div>
+                <span class="k-sub">${new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}</span>`;
+            row.querySelector('.fw-semibold').textContent = d.learnerName || hash.substring(0, 12) + '…';
+            row.querySelector('.k-sub').textContent = `${LABELS[kind][0]} · ${d.message}`;
+            log.prepend(row);
+            while (log.children.length > 20) log.lastChild.remove();
+        }
+    </script>
+}

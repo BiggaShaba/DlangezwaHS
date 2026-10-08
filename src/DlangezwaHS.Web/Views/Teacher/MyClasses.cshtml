@@ -1,0 +1,44 @@
+@model IList<TeacherClassSubject>
+@{ ViewData["Title"] = "My Classes"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-grid-3x2-gap me-2"></i>My Classes &amp; Subjects</h2>
+</div>
+
+<div class="row g-4">
+@foreach (var a in Model)
+{
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-building me-2"></i>@a.Class?.DisplayName</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="small text-muted">Subject</div>
+                    <div class="fw-semibold">@a.Subject?.Name <span class="text-muted small">(@a.Subject?.Code)</span></div>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <a asp-action="RecordAttendance" asp-route-classId="@a.ClassId"
+                       class="btn btn-dhs-primary btn-sm">
+                        <i class="bi bi-calendar-check me-1"></i>Record Attendance
+                    </a>
+                    <a asp-action="ClassLearners" asp-route-classId="@a.ClassId"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-people me-1"></i>View Learners
+                    </a>
+                    <a asp-action="AttendanceHistory" asp-route-classId="@a.ClassId"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-clock-history me-1"></i>Attendance History
+                    </a>
+                    <a asp-action="ClassPerformance"
+                       asp-route-classId="@a.ClassId" asp-route-subjectId="@a.SubjectId"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-bar-chart me-1"></i>Class Performance
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+</div>

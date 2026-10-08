@@ -1,0 +1,74 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model ActivityCreateViewModel
+@{ ViewData["Title"] = Model.Id.HasValue ? "Edit Activity" : "Schedule Activity"; }
+
+<div class="page-header"><h2><i class="bi bi-trophy me-2"></i>@ViewData["Title"]</h2></div>
+
+<form asp-action="ActivityCreate" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="Name" class="form-label">Activity Name <span class="text-danger">*</span></label>
+                    <input asp-for="Name" class="form-control" placeholder="e.g. Soccer, Chess, Drama, Choir" />
+                    <span asp-validation-for="Name" class="text-danger small"></span>
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="Type" class="form-label">Activity Type</label>
+                    <select asp-for="Type" asp-items="Html.GetEnumSelectList<ActivityType>()" class="form-select"></select>
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="Venue" class="form-label">Venue</label>
+                    <input asp-for="Venue" class="form-control" />
+                </div>
+
+                <div class="col-12">
+                    <label asp-for="Description" class="form-label">Description</label>
+                    <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                </div>
+
+                <div class="col-md-3">
+                    <label asp-for="StartTime" class="form-label">Start Time</label>
+                    <input asp-for="StartTime" type="time" class="form-control" />
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="EndTime" class="form-label">End Time</label>
+                    <input asp-for="EndTime" type="time" class="form-control" />
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="MaxParticipants" class="form-label">Max Participants</label>
+                    <input asp-for="MaxParticipants" type="number" min="1" class="form-control" />
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <input asp-for="RegistrationOpen" class="form-check-input" />
+                        <label asp-for="RegistrationOpen" class="form-check-label">Registration Open</label>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Target Group — Min Grade</label>
+                    <select asp-for="MinGradeLevel" asp-items="@(new SelectList(Model.Grades, "Level", "Name"))" class="form-select">
+                        <option value="">All Grades</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Target Group — Max Grade</label>
+                    <select asp-for="MaxGradeLevel" asp-items="@(new SelectList(Model.Grades, "Level", "Name"))" class="form-select">
+                        <option value="">All Grades</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer d-flex gap-2">
+            <button type="submit" class="btn btn-dhs-primary px-4"><i class="bi bi-check-circle me-1"></i>Save Activity</button>
+            <a asp-action="Activities" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </div>
+</form>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

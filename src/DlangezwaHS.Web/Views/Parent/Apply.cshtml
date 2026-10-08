@@ -1,0 +1,133 @@
+@model NewApplicationViewModel
+@{ ViewData["Title"] = "Apply for Learner"; }
+
+<div class="page-header k-header">
+    <h2><i class="bi bi-file-earmark-plus me-2"></i>Apply for Learner</h2>
+    <p>Complete all fields and upload the required documents.</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <!-- Step indicators -->
+        <div class="d-flex align-items-center gap-2 mb-4">
+            <span class="step-badge step-active">1</span>
+            <span class="small fw-semibold">Learner Details</span>
+            <div class="flex-fill border-top mx-2"></div>
+            <span class="step-badge step-active">2</span>
+            <span class="small fw-semibold">Upload Documents</span>
+            <div class="flex-fill border-top mx-2"></div>
+            <span class="step-badge step-active">3</span>
+            <span class="small fw-semibold">Submit</span>
+        </div>
+
+        <div class="card k-rise" style="border-radius:20px">
+            <div class="card-body p-4">
+                <form asp-action="Apply" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+                    <!-- Learner Info -->
+                    <h5 class="fw-bold mb-3" style="color:#0B2A4A;">
+                        <i class="bi bi-person me-2"></i>Learner Information
+                    </h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label asp-for="LearnerFirstName" class="form-label">First Name <span class="text-danger">*</span></label>
+                            <input asp-for="LearnerFirstName" class="form-control" placeholder="As per birth certificate" />
+                            <span asp-validation-for="LearnerFirstName" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="LearnerLastName" class="form-label">Surname <span class="text-danger">*</span></label>
+                            <input asp-for="LearnerLastName" class="form-control" placeholder="As per birth certificate" />
+                            <span asp-validation-for="LearnerLastName" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="DateOfBirth" class="form-label">Date of Birth <span class="text-danger">*</span></label>
+                            <input asp-for="DateOfBirth" class="form-control" type="date" />
+                            <span asp-validation-for="DateOfBirth" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Gender" class="form-label">Gender <span class="text-danger">*</span></label>
+                            <select asp-for="Gender" class="form-select" required>
+                                <option value="">— Select —</option>
+                                <option>Male</option>
+                                <option>Female</option>
+                                <option>Other</option>
+                            </select>
+                            <span asp-validation-for="Gender" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="LearnerIdNumber" class="form-label">ID / Passport No. <span class="text-danger">*</span></label>
+                            <input asp-for="LearnerIdNumber" class="form-control" placeholder="SA ID or Passport number" />
+                            <span asp-validation-for="LearnerIdNumber" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    <!-- Documents -->
+                    <h5 class="fw-bold mb-3" style="color:#0B2A4A;">
+                        <i class="bi bi-paperclip me-2"></i>Required Documents
+                        <small class="text-muted fw-normal fs-6 ms-2">(PDF, JPG, PNG — max 5 MB each)</small>
+                    </h5>
+
+                    <div class="row g-3 mb-4">
+                        @foreach (var (fieldId, label, desc) in new[]{
+                            ("LearnerIdDoc",      "Learner ID / Passport",     "Certified copy of learner's ID document or passport"),
+                            ("PreviousReportDoc", "Previous School Report",    "Most recent school report (Grade 7 or previous grade)"),
+                            ("GuardianIdDoc",     "Parent / Guardian ID",      "Certified copy of parent or guardian's ID document")
+                        })
+                        {
+                            <div class="col-md-4">
+                                <label class="form-label">@label <span class="text-danger">*</span></label>
+                                <div class="border rounded p-3 text-center" style="background:#f8fafc; cursor:pointer;"
+                                     onclick="document.getElementById('@fieldId').click()">
+                                    <i class="bi bi-cloud-upload fs-2" style="color:#97C8E9;"></i>
+                                    <div class="small text-muted mt-1">@desc</div>
+                                    <div class="small text-muted">Click to upload</div>
+                                </div>
+                                <input type="file" id="@fieldId" name="@fieldId" class="form-control mt-1 dhs-doc"
+                                       accept=".pdf,.jpg,.jpeg,.png" required style="display:none;" />
+                                <div id="@fieldId-feedback" class="alert alert-danger small py-1 mt-1 d-none"></div>
+                                <div id="@fieldId-name" class="small text-success mt-1"></div>
+                                <script>
+                                    document.getElementById('@fieldId').addEventListener('change', function() {
+                                        var n = document.getElementById('@fieldId-name');
+                                        n.textContent = this.files[0] ? '✓ ' + this.files[0].name : '';
+                                    });
+                                </script>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Declaration -->
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" id="declaration" required />
+                        <label class="form-check-label small text-muted" for="declaration">
+                            I declare that all information provided is accurate and complete, and the uploaded documents are authentic.
+                        </label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="k-btn k-btn-primary px-4 py-2">
+                            <i class="bi bi-send me-1"></i> Submit Application
+                        </button>
+                        <a asp-action="Index" class="k-btn k-btn-ghost">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Info box -->
+        <div class="card mt-3 border-0" style="background:#f0f6fc;">
+            <div class="card-body py-2 px-3 small text-muted">
+                <strong>What happens next?</strong> Your application will be reviewed by the admissions office.
+                You will receive an email notification once a decision has been made.
+                The review process typically takes 3–5 working days.
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

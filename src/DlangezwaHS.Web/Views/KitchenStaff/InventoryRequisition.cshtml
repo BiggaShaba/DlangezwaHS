@@ -1,0 +1,47 @@
+@model PurchaseRequisitionDetailViewModel
+@{ ViewData["Title"] = "Purchase Requisition"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Inventory">Inventory</a></li>
+            <li class="breadcrumb-item active">Requisition #@Model.Id</li>
+        </ol></nav>
+        <h2><i class="bi bi-clipboard-check me-2"></i>Purchase Requisition #@Model.Id</h2>
+        <p>Generated @Model.GeneratedAt.ToString("dd MMM yyyy HH:mm") — Status: <span class="badge badge-pending rounded-pill">@Model.Status</span></p>
+    </div>
+    @if (Model.Status == "Draft")
+    {
+        <form method="post" asp-action="SubmitRequisition">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.Id" />
+            <button type="submit" class="btn btn-dhs-primary">Submit Requisition</button>
+        </form>
+    }
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Items.Any())
+        {
+            <div class="p-5 text-center text-muted">No shortfall — all required ingredients are already in stock.</div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Ingredient</th><th>Required</th><th>In Stock</th><th>To Order</th></tr></thead>
+                <tbody>
+                @foreach (var i in Model.Items)
+                {
+                    <tr>
+                        <td><strong>@i.IngredientName</strong></td>
+                        <td>@i.QuantityRequired.ToString("N1") @i.Unit</td>
+                        <td>@i.QuantityInStock.ToString("N1") @i.Unit</td>
+                        <td class="fw-bold text-danger">@i.QuantityToOrder.ToString("N1") @i.Unit</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

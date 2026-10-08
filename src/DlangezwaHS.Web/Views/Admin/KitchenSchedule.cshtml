@@ -1,0 +1,146 @@
+@model IList<KitchenScheduleRow>
+@{
+    ViewData["Title"] = "Kitchen Schedule";
+    var today = DlangezwaHS.Web.Services.SchoolClock.Today;
+    var types = new[] { "Breakfast", "Lunch", "Dinner" };
+    var todays = Model.Where(s => s.ScheduledDate.Date == today).OrderBy(s => Array.IndexOf(types, s.MealType)).ToList();
+    var upcoming = Model.Where(s => s.ScheduledDate.Date > today).GroupBy(s => s.ScheduledDate.Date).OrderBy(g => g.Key).ToList();
+    var previous = Model.Where(s => s.ScheduledDate.Date < today).GroupBy(s => s.ScheduledDate.Date).OrderByDescending(g => g.Key).ToList();
+    var unpublished = Model.Count(s => !s.IsPublished && s.ScheduledDate.Date >= today);
+    var delayed = Model.Count(s => s.Status == "Delayed" && s.ScheduledDate.Date >= today.AddDays(-7));
+    var timed = Model.Where(s => s.MinutesPerServing is not null && s.ScheduledDate.Date >= today.AddDays(-30)).ToList();
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+    string StatusPill(string s) => s switch { "Completed" => "ok", "Delayed" => "danger", "InProgress" => "warn", _ => "" };
+    string StatusLabel(string s) => s == "InProgress" ? "In progress" : s;
+}
+
+<style>
+    .ks-row { display: grid; grid-template-columns: auto 1fr auto; gap: .9rem; align-items: center; padding: .85rem 1rem; border-radius: 16px; background: #fff;
+        border: 1px solid #e2e8f0; margin-bottom: .55rem; transition: transform .25s var(--ease-spring), box-shadow .25s, border-color .2s; }
+    .ks-row:hover { transform: translateX(4px); box-shadow: var(--shadow-ambient); border-color: var(--dhs-blue); }
+    .ks-row .ico { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; font-size: 1.2rem; color: #fff; }
+    .ks-row .ico.breakfast { background: var(--k-breakfast); } .ks-row .ico.lunch { background: var(--k-lunch); } .ks-row .ico.dinner { background: var(--k-dinner); }
+    .ks-today { border-radius: 24px; padding: 1.2rem; background: linear-gradient(135deg, #f0f9ff, #fff); border: 1.5px solid var(--dhs-blue); box-shadow: var(--shadow-ambient); }
+    .ks-progress { height: 6px; border-radius: 99px; background: #e2e8f0; overflow: hidden; width: 120px; }
+    .ks-progress span { display: block; height: 100%; background: linear-gradient(90deg, #34d399, #10b981); border-radius: 99px; width: 0; transition: width 1.2s cubic-bezier(.16,1,.3,1); }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-calendar2-check me-2"></i>Kitchen Schedule</h2>
+        <p>Which team prepares each meal, and how long it actually took</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="KitchenTeams" class="k-btn k-btn-light"><i class="bi bi-people"></i>Kitchen Teams</a>
+        <a asp-action="KitchenScheduleCreate" class="k-btn k-btn-accent"><i class="bi bi-calendar-plus"></i>Schedule Teams</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-calendar-day"></i>Today</div><div class="k-stat-value" data-count="@todays.Count">@todays.Count</div><div class="k-stat-note">@todays.Count(s => s.Status == "Completed") completed</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-send"></i>Not published</div><div class="k-stat-value" data-count="@unpublished">@unpublished</div><div class="k-stat-note">staff not notified</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-exclamation-triangle"></i>Delayed</div><div class="k-stat-value" data-count="@delayed">@delayed</div><div class="k-stat-note">in the last 7 days</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-stopwatch"></i>Actual prep</div><div class="k-stat-value">@(timed.Any() ? timed.Average(s => s.MinutesPerServing!.Value).ToString("0.0") : "—")</div><div class="k-stat-note">min per serving (30 days)</div></div></div>
+</div>
+
+@{
+    // One schedule as a row; reused by every section
+    async Task Row(KitchenScheduleRow s)
+    {
+        var key = s.MealType.ToLowerInvariant();
+        var pct = s.TaskCount > 0 ? s.TasksDone * 100 / s.TaskCount : 0;
+        <div class="ks-row">
+            <span class="ico @key" aria-hidden="true"><i class="bi @TypeIcon(s.MealType)"></i></span>
+            <div class="min-w-0">
+                <div class="fw-bold text-truncate" style="color:var(--dhs-navy)">@s.MenuDescription</div>
+                <div class="k-sub d-flex flex-wrap gap-2 align-items-center">
+                    <span class="k-meal @key">@s.MealType</span>
+                    <span><i class="bi bi-people me-1"></i>@(s.TeamName ?? "—")</span>
+                    <span><i class="bi bi-basket me-1"></i>@s.PortionsPlanned portions</span>
+                    <span><i class="bi bi-person me-1"></i>@s.TaskCount/@s.StaffRecommended staff</span>
+                    <span><i class="bi bi-clock me-1"></i>@s.Shift</span>
+                    @if (s.MinutesPerServing is double mps) { <span class="fw-semibold" style="color:var(--dhs-navy)"><i class="bi bi-stopwatch me-1"></i>@mps.ToString("0.##") min/serving</span> }
+                </div>
+                @if (!string.IsNullOrEmpty(s.DelayReason)) { <div class="small text-danger mt-1"><i class="bi bi-exclamation-triangle me-1"></i>@s.DelayReason</div> }
+            </div>
+            <div class="text-end d-flex flex-column align-items-end gap-1">
+                @if (!s.IsPublished)
+                {
+                    <form method="post" asp-action="PublishKitchenSchedule" class="m-0" data-busy>
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@s.Id" />
+                        <button type="submit" class="k-btn k-btn-primary k-btn-sm" data-busy-text="Publishing…"><i class="bi bi-send"></i>Publish</button>
+                    </form>
+                }
+                else
+                {
+                    <span class="k-pill @StatusPill(s.Status)">@StatusLabel(s.Status)</span>
+                    <span class="ks-progress" title="@s.TasksDone of @s.TaskCount tasks done"><span data-w="@pct"></span></span>
+                }
+            </div>
+        </div>
+    }
+}
+
+<div class="k-section k-rise mt-0" style="--i:4"><i class="bi bi-calendar-day me-1"></i>Today · @today.ToString("dddd dd MMMM")</div>
+<div class="ks-today k-rise" style="--i:5">
+    @if (!todays.Any())
+    {
+        <div class="text-center py-3"><i class="bi bi-calendar-x fs-3 d-block mb-1" style="color:var(--dhs-blue-dark)"></i><strong style="color:var(--dhs-navy)">Nothing scheduled today</strong>
+            <div class="k-sub">Use <strong>Schedule Teams</strong> to assign teams to today's meals.</div></div>
+    }
+    @foreach (var s in todays) { await Row(s); }
+</div>
+
+<div class="k-section k-rise" style="--i:6">Upcoming</div>
+@if (!upcoming.Any()) { <p class="k-sub">No upcoming schedules.</p> }
+<div id="upcomingList" data-more-list data-more-initial="5" data-more-step="5">
+    @foreach (var (day, idx) in upcoming.Select((d, i) => (d, i)))
+    {
+        var id = $"up-{day.Key:yyyyMMdd}";
+        <div class="k-acc" data-more-item>
+            <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="@(idx == 0 ? "true" : "false")" aria-controls="@id">
+                <span class="k-date" aria-hidden="true"><span><b>@day.Key.Day</b>@day.Key.ToString("MMM")</span></span>
+                <span class="flex-grow-1">
+                    <span class="k-acc-title d-block">@day.Key.ToString("dddd")</span>
+                    <span class="k-acc-meta">@day.Count() schedule(s) · @day.Sum(s => s.PortionsPlanned) portions @if (day.Any(s => !s.IsPublished)) { <span class="k-pill warn">@day.Count(s => !s.IsPublished) not published</span> }</span>
+                </span>
+                <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="collapse @(idx == 0 ? "show" : "")" id="@id"><div class="k-acc-body">@foreach (var s in day.OrderBy(s => Array.IndexOf(types, s.MealType))) { await Row(s); }</div></div>
+        </div>
+    }
+</div>
+<div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="upcomingList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more days</button></div>
+
+<div class="k-section k-rise" style="--i:7">Previous</div>
+@if (!previous.Any()) { <p class="k-sub">No previous schedules.</p> }
+<div id="previousList" data-more-list data-more-initial="5" data-more-step="5">
+    @foreach (var day in previous)
+    {
+        var id = $"pr-{day.Key:yyyyMMdd}";
+        var dayTimed = day.Where(s => s.MinutesPerServing is not null).ToList();
+        <div class="k-acc is-past" data-more-item>
+            <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="false" aria-controls="@id">
+                <span class="k-date" aria-hidden="true"><span><b>@day.Key.Day</b>@day.Key.ToString("MMM")</span></span>
+                <span class="flex-grow-1">
+                    <span class="k-acc-title d-block">@day.Key.ToString("dddd")</span>
+                    <span class="k-acc-meta">@day.Count() schedule(s) · @day.Count(s => s.Status == "Completed") completed @if (day.Any(s => s.Status == "Delayed")) { <span class="k-pill danger">delayed</span> }</span>
+                </span>
+                @if (dayTimed.Any()) { <span class="k-sub me-1 text-nowrap"><i class="bi bi-stopwatch me-1"></i>@dayTimed.Average(s => s.MinutesPerServing!.Value).ToString("0.##") min/serving</span> }
+                <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="collapse" id="@id"><div class="k-acc-body">@foreach (var s in day.OrderBy(s => Array.IndexOf(types, s.MealType))) { await Row(s); }</div></div>
+        </div>
+    }
+</div>
+<div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="previousList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more days</button></div>
+
+@section Scripts {
+<script>
+    // Progress bars fill in after load, and when a day is opened
+    const fill = root => requestAnimationFrame(() => root.querySelectorAll('.ks-progress span[data-w]').forEach(s => s.style.width = s.dataset.w + '%'));
+    fill(document);
+    document.addEventListener('shown.bs.collapse', e => fill(e.target));
+</script>
+}

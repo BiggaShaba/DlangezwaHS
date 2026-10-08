@@ -1,0 +1,41 @@
+@model PaymentInitViewModel
+@{ ViewData["Title"] = "Pay Fee"; }
+
+<style>
+    .pay-amount { text-align: center; padding: 1.6rem; border-radius: 22px; color: #fff; position: relative; overflow: hidden;
+        background: linear-gradient(120deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 55%, var(--dhs-blue-dark) 100%); }
+    .pay-amount::after { content: ""; position: absolute; width: 220px; height: 220px; right: -70px; top: -110px; border-radius: 50%; background: radial-gradient(circle, rgba(151,200,233,.45), transparent 70%); }
+    .pay-amount .v { font-size: 2.4rem; font-weight: 800; position: relative; z-index: 1; }
+    .pay-amount .l { font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dhs-blue); position: relative; z-index: 1; }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-credit-card me-2"></i>Pay Fee</h2>
+        <p>@Model.LearnerName</p>
+    </div>
+    <a asp-action="Index" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Dashboard</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-5">
+        <div class="k-card k-rise" style="--i:0">
+            <div class="pay-amount mb-4">
+                <div class="l">@Model.Type fee</div>
+                <div class="v">R@(Model.Amount.ToString("N2"))</div>
+            </div>
+            <form asp-action="Pay" method="post" data-busy>
+                @Html.AntiForgeryToken()
+                <input asp-for="LearnerId" type="hidden" />
+                <input asp-for="Type" type="hidden" />
+                <input asp-for="Amount" type="hidden" />
+                <div class="d-flex gap-2 k-sub mb-4"><i class="bi bi-shield-lock"></i>You'll go to our payment provider (sandbox) and come back here once the payment is confirmed. A receipt is emailed to you.</div>
+                <button type="submit" class="k-btn k-btn-primary w-100 py-2" data-busy-text="Connecting…"><i class="bi bi-lock"></i>Pay R@(Model.Amount.ToString("N2")) securely</button>
+                <a asp-action="Index" class="k-btn k-btn-ghost w-100 mt-2">Cancel</a>
+            </form>
+        </div>
+        <div class="k-card mt-3 k-rise" style="--i:1">
+            <div class="d-flex gap-2"><i class="bi bi-bank" style="color:var(--dhs-blue-dark)"></i><div class="k-sub"><strong style="color:var(--dhs-navy)">Prefer EFT?</strong> Pay into the school account and use the learner's ID as the reference — the office records it for you.</div></div>
+        </div>
+    </div>
+</div>

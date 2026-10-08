@@ -1,0 +1,8 @@
+@model IList<DietaryProfileRow>
+@{ ViewData["Title"] = "Dietary Profiles"; }
+
+<partial name="_DietaryBoard" model="Model" view-data='new ViewDataDictionary(ViewData) { ["SummaryOnly"] = true }' />
+
+@section Scripts {
+    <partial name="_DietaryBoardScripts" model="Model" />
+}

@@ -1,0 +1,292 @@
+@model MealComplianceReportDto
+@{
+    ViewData["Title"] = "Meal Compliance Report";
+    DateTime from = ViewBag.From;
+    DateTime to = ViewBag.To;
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var types = new[] { "Breakfast", "Lunch", "Dinner" };
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+
+    var expected = Model.AttendanceByMealType.Sum(r => r.TotalExpected);
+    var present = Model.AttendanceByMealType.Sum(r => r.TotalPresent);
+    var attendancePct = expected > 0 ? present * 100.0 / expected : 0;
+    var wastePct = Model.PortionsPrepared > 0 ? Model.WasteEstimate * 100.0 / Model.PortionsPrepared : 0;
+    var rated = Model.SatisfactionByMealType.Where(s => s.AverageRating > 0).ToList();
+    var avgRating = rated.Any() ? rated.Average(s => s.AverageRating) : 0;
+    var budgetDiff = Model.ActualSpend - Model.EstimatedCost;
+    var issues = Model.DietaryConflictsServed.Count + Model.AnomalyFlags.Count;
+    var days = Model.PreOrderVsActual.GroupBy(r => r.Date.Date).OrderByDescending(g => g.Key).ToList();
+
+    var chart = new
+    {
+        types = Model.AttendanceByMealType.Select(r => r.MealType).ToList(),
+        attendance = Model.AttendanceByMealType.Select(r => Math.Round(r.AttendancePct, 1)).ToList(),
+        satisfaction = types.Select(t => Model.SatisfactionByMealType.FirstOrDefault(s => s.MealType == t)?.AverageRating ?? 0).ToList(),
+        complaints = types.Select(t => Model.SatisfactionByMealType.FirstOrDefault(s => s.MealType == t)?.Complaints ?? 0).ToList(),
+        dayLabels = days.OrderBy(d => d.Key).Select(d => d.Key.ToString("dd MMM")).ToList(),
+        preOrdered = days.OrderBy(d => d.Key).Select(d => d.Sum(r => r.PreOrdered)).ToList(),
+        attended = days.OrderBy(d => d.Key).Select(d => d.Sum(r => r.Attended)).ToList(),
+        served = Model.PortionsServed,
+        waste = Model.WasteEstimate,
+        estimated = Model.EstimatedCost,
+        actual = Model.ActualSpend
+    };
+    var chartJson = System.Text.Json.JsonSerializer.Serialize(chart);
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-file-earmark-bar-graph me-2"></i>Meal Compliance Report</h2>
+        <p>@from.ToString("dd MMM yyyy") – @to.ToString("dd MMM yyyy") · attendance, dietary safety, waste, budget and satisfaction</p>
+    </div>
+    <a asp-action="MealComplianceReportDownload" asp-route-from="@from.ToString("yyyy-MM-dd")" asp-route-to="@to.ToString("yyyy-MM-dd")" class="k-btn k-btn-accent" id="pdfBtn">
+        <i class="bi bi-file-earmark-pdf"></i><span>Download PDF</span>
+    </a>
+</div>
+
+<form method="get" class="k-card mb-4 k-rise" style="--i:0" id="rangeForm" data-busy>
+    <div class="row g-3 align-items-end">
+        <div class="col-sm-6 col-lg-3">
+            <label class="k-label" for="from">From</label>
+            <input type="date" id="from" name="from" class="form-control k-input" value="@from.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <label class="k-label" for="to">To</label>
+            <input type="date" id="to" name="to" class="form-control k-input" value="@to.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-lg-6 d-flex flex-wrap gap-2 align-items-end">
+            <button type="button" class="k-btn k-btn-ghost k-btn-sm" data-range="7">Last 7 days</button>
+            <button type="button" class="k-btn k-btn-ghost k-btn-sm" data-range="14">Last 14 days</button>
+            <button type="button" class="k-btn k-btn-ghost k-btn-sm" data-range="30">Last 30 days</button>
+            <button type="submit" class="k-btn k-btn-primary ms-auto" data-busy-text="Updating…"><i class="bi bi-arrow-repeat"></i>Update report</button>
+        </div>
+    </div>
+    <div class="text-danger small mt-2" id="rangeError" hidden>The "from" date must be on or before the "to" date.</div>
+</form>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-qr-code-scan"></i>Attendance</div>
+        <div class="k-stat-value"><span data-count="@attendancePct.ToString("0", inv)">@attendancePct.ToString("0")</span>%</div><div class="k-stat-note">@present of @expected expected meals</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat @(wastePct > 10 ? "danger" : "dinner")"><div class="k-stat-label"><i class="bi bi-recycle"></i>Food waste</div>
+        <div class="k-stat-value"><span data-count="@wastePct.ToString("0", inv)">@wastePct.ToString("0")</span>%</div><div class="k-stat-note">@Model.WasteEstimate of @Model.PortionsPrepared portions</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-star-fill"></i>Satisfaction</div>
+        <div class="k-stat-value">@if (avgRating > 0) { <span data-count="@avgRating.ToString("0.0", inv)" data-decimals="1">@avgRating.ToString("0.0")</span><small class="k-sub"> / 5</small> } else { <span>—</span> }</div>
+        <div class="k-stat-note">@Model.SatisfactionByMealType.Sum(s => s.Complaints) complaint(s)</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:4"><div class="k-stat @(issues > 0 ? "danger" : "")" style="@(issues > 0 ? "" : "--k-accent:#10b981")"><div class="k-stat-label"><i class="bi @(issues > 0 ? "bi-exclamation-octagon" : "bi-shield-check")"></i>Issues</div>
+        <div class="k-stat-value" data-count="@issues">@issues</div><div class="k-stat-note">@Model.DietaryConflictsServed.Count allergy · @Model.AnomalyFlags.Count anomaly</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6 k-rise" style="--i:5">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Attendance by meal</h3><p class="k-sub">Share of expected learners who collected their meal</p></div></div>
+            <div style="position:relative;height:240px"><canvas id="attendanceChart" role="img" aria-label="Attendance percentage per meal"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-6 k-rise" style="--i:6">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Satisfaction by meal</h3><p class="k-sub">Average rating and number of complaints (2★ or lower)</p></div></div>
+            <div style="position:relative;height:240px"><canvas id="satisfactionChart" role="img" aria-label="Average rating and complaints per meal"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-8 k-rise" style="--i:7">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Pre-ordered vs attended</h3><p class="k-sub">Per day across the period</p></div></div>
+            <div style="position:relative;height:260px"><canvas id="dailyChart" role="img" aria-label="Pre-ordered and attended meals per day"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4 k-rise" style="--i:8">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Budget vs actual</h3><p class="k-sub">Estimated food cost vs submitted requisitions</p></div></div>
+            <div style="position:relative;height:180px"><canvas id="budgetChart" role="img" aria-label="Estimated cost compared with actual spend"></canvas></div>
+            <div class="text-center mt-2">
+                <span class="k-pill @(budgetDiff > 0 ? "danger" : "ok")">@(budgetDiff > 0 ? "Over" : "Under") estimate by R@(Math.Abs(budgetDiff).ToString("N0"))</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-6 k-rise" style="--i:9">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Dietary compliance</h3><p class="k-sub">Meals served that contained a learner's severe allergen</p></div></div>
+            @if (!Model.DietaryConflictsServed.Any())
+            {
+                <div class="d-flex align-items-center gap-2 p-3" style="border-radius:16px;background:#ecfdf5;color:#166534"><i class="bi bi-shield-check fs-4"></i><div><strong>No allergy conflicts</strong><div class="small">No learner was served a meal containing their severe allergen.</div></div></div>
+            }
+            <div id="conflictList" data-more-list data-more-initial="5" data-more-step="5">
+                @foreach (var c in Model.DietaryConflictsServed)
+                {
+                    <div class="d-flex gap-2 p-2 mb-2" data-more-item style="border-radius:12px;background:#fef2f2;color:#991b1b"><i class="bi bi-exclamation-octagon-fill mt-1"></i><span class="small">@c</span></div>
+                }
+            </div>
+            <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost k-btn-sm" data-more-btn="conflictList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+        </div>
+    </div>
+    <div class="col-lg-6 k-rise" style="--i:10">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Anomaly flags</h3><p class="k-sub">Missed meals, low ratings and budget overruns</p></div></div>
+            @if (!Model.AnomalyFlags.Any())
+            {
+                <div class="d-flex align-items-center gap-2 p-3" style="border-radius:16px;background:#ecfdf5;color:#166534"><i class="bi bi-check-circle fs-4"></i><div><strong>No anomalies</strong><div class="small">Nothing unusual in this period.</div></div></div>
+            }
+            <div id="anomalyList" data-more-list data-more-initial="5" data-more-step="5">
+                @foreach (var a in Model.AnomalyFlags)
+                {
+                    <div class="d-flex gap-2 p-2 mb-2" data-more-item style="border-radius:12px;background:#fffbeb;color:#92400e"><i class="bi bi-flag-fill mt-1"></i><span class="small">@a</span></div>
+                }
+            </div>
+            <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost k-btn-sm" data-more-btn="anomalyList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="k-section k-rise" style="--i:11">Pre-ordered vs attended · by day</div>
+@if (!days.Any())
+{
+    <div class="k-empty"><i class="bi bi-calendar-x"></i><strong>No meals in this period</strong><p>Choose a different date range.</p></div>
+}
+<div id="dayList" data-more-list data-more-initial="5" data-more-step="5">
+    @foreach (var (day, idx) in days.Select((d, i) => (d, i)))
+    {
+        var id = $"cd-{day.Key:yyyyMMdd}";
+        var pre = day.Sum(r => r.PreOrdered);
+        var att = day.Sum(r => r.Attended);
+        var pct = pre > 0 ? att * 100.0 / pre : 0;
+        <div class="k-acc is-past" data-more-item>
+            <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="false" aria-controls="@id">
+                <span class="k-date" aria-hidden="true"><span><b>@day.Key.Day</b>@day.Key.ToString("MMM")</span></span>
+                <span class="flex-grow-1">
+                    <span class="k-acc-title d-block">@day.Key.ToString("dddd")</span>
+                    <span class="k-acc-meta">@day.Count() meal(s) · @att of @pre attended</span>
+                </span>
+                <span class="text-end me-1" style="min-width:110px">
+                    <span class="d-block fw-bold @(pct < 80 ? "text-danger" : "")" style="font-size:1.1rem">@pct.ToString("0")%</span>
+                    <span class="k-meter d-block mt-1"><span class="@(pct < 80 ? "danger" : "")" data-pct="@pct.ToString("0", inv)"></span></span>
+                </span>
+                <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="collapse" id="@id">
+                <div class="k-acc-body">
+                    <div class="k-table-wrap">
+                        <table class="k-table">
+                            <thead><tr><th>Meal</th><th>Menu</th><th class="k-num">Pre-ordered</th><th class="k-num">Attended</th><th class="k-num">Variance</th></tr></thead>
+                            <tbody>
+                            @foreach (var r in day.OrderBy(r => Array.IndexOf(types, r.MealType)))
+                            {
+                                <tr>
+                                    <td><span class="k-meal @r.MealType.ToLowerInvariant()"><i class="bi @TypeIcon(r.MealType)"></i>@r.MealType</span></td>
+                                    <td class="fw-semibold">@r.MenuDescription</td>
+                                    <td class="k-num">@r.PreOrdered</td>
+                                    <td class="k-num">@r.Attended</td>
+                                    <td class="k-num fw-bold @(r.Variance != 0 ? "text-danger" : "")">@(r.Variance > 0 ? "+" : "")@r.Variance</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+<div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="dayList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more days</button></div>
+
+<div class="k-card mt-4 k-rise" style="--i:12">
+    <div class="k-card-head"><div><h3 class="k-title">Archived reports</h3><p class="k-sub">A copy is saved every time a PDF is downloaded</p></div></div>
+    @if (!Model.ArchivedReports.Any())
+    {
+        <p class="k-sub mb-0">No reports generated yet. Use <strong>Download PDF</strong> to create and archive one.</p>
+    }
+    else
+    {
+        <table class="k-table">
+            <thead><tr><th>Period</th><th>Generated</th><th>By</th><th></th></tr></thead>
+            <tbody id="archiveList" data-more-list data-more-initial="5" data-more-step="5">
+            @foreach (var r in Model.ArchivedReports)
+            {
+                <tr data-more-item>
+                    <td class="fw-semibold">@r.FromDate.ToString("dd MMM") – @r.ToDate.ToString("dd MMM yyyy")</td>
+                    <td><span class="k-sub">@r.GeneratedAt.AddHours(2).ToString("dd MMM yyyy HH:mm")</span></td>
+                    <td><span class="k-sub">@r.GeneratedBy</span></td>
+                    <td class="text-end">@if (!string.IsNullOrEmpty(r.PdfUrl)) { <a href="@r.PdfUrl" target="_blank" rel="noopener" class="k-btn k-btn-ghost k-btn-sm"><i class="bi bi-file-earmark-pdf"></i>Open</a> }</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="archiveList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+    }
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    // Date range helpers
+    const from = document.getElementById('from'), to = document.getElementById('to');
+    const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
+        const end = new Date(), start = new Date();
+        start.setDate(end.getDate() - Number(b.dataset.range));
+        from.value = iso(start); to.value = iso(end);
+        document.getElementById('rangeForm').requestSubmit();
+    }));
+    document.getElementById('rangeForm').addEventListener('submit', e => {
+        const bad = from.value && to.value && from.value > to.value;
+        document.getElementById('rangeError').hidden = !bad;
+        if (bad) e.preventDefault();
+    });
+    // The PDF downloads without leaving the page — show progress briefly
+    document.getElementById('pdfBtn').addEventListener('click', e => {
+        const b = e.currentTarget; b.classList.add('is-busy'); b.querySelector('span').textContent = 'Preparing PDF…';
+        setTimeout(() => { b.classList.remove('is-busy'); b.querySelector('span').textContent = 'Download PDF'; }, 3500);
+    });
+
+    if (typeof Chart === 'undefined') return;
+    const d = @Html.Raw(chartJson);
+    const NAVY = '#0B2A4A', NAVY_MID = '#1a4a7a', BLUE = '#97C8E9', BLUE_DARK = '#5ea8d3', GREY = '#6B7280';
+    const COLORS = { Breakfast: '#f59e0b', Lunch: '#0ea5e9', Dinner: '#6366f1' };
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const animation = { duration: reduce ? 0 : 1800, easing: 'easeOutQuart',
+        delay: c => c.type === 'data' && c.mode === 'default' ? c.dataIndex * 110 + c.datasetIndex * 140 : 0 };
+    const tooltip = { backgroundColor: NAVY, padding: 12, cornerRadius: 12, usePointStyle: true };
+    const legend = { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'rectRounded', color: NAVY, padding: 14 } };
+    const axis = { grid: { color: 'rgba(11,42,74,.07)' }, border: { display: false }, ticks: { color: GREY } };
+    const rand = n => 'R' + Number(n).toLocaleString('en-ZA', { maximumFractionDigits: 0 });
+
+    new Chart(document.getElementById('attendanceChart'), {
+        type: 'bar',
+        data: { labels: d.types, datasets: [{ label: 'Attendance', data: d.attendance, backgroundColor: d.types.map(t => COLORS[t] || BLUE_DARK), borderRadius: 10, borderSkipped: false, maxBarThickness: 64 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation,
+            plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { label: c => ` ${c.parsed.y}% attended` } } },
+            scales: { x: { ...axis, grid: { display: false } }, y: { ...axis, min: 0, max: 100, ticks: { ...axis.ticks, callback: v => v + '%' } } } }
+    });
+    new Chart(document.getElementById('satisfactionChart'), {
+        data: { labels: ['Breakfast', 'Lunch', 'Dinner'], datasets: [
+            { type: 'bar', label: 'Average rating', data: d.satisfaction, yAxisID: 'y', backgroundColor: ['#f59e0b', '#0ea5e9', '#6366f1'], borderRadius: 10, borderSkipped: false, maxBarThickness: 64, order: 2 },
+            { type: 'line', label: 'Complaints', data: d.complaints, yAxisID: 'y1', borderColor: '#dc2626', backgroundColor: '#fff', borderWidth: 3, pointRadius: 6, pointBorderWidth: 3, tension: .35, order: 1 }
+        ] },
+        options: { responsive: true, maintainAspectRatio: false, animation, interaction: { mode: 'index', intersect: false },
+            plugins: { legend, tooltip },
+            scales: { x: { ...axis, grid: { display: false } }, y: { ...axis, min: 0, max: 5, ticks: { ...axis.ticks, stepSize: 1 } },
+                      y1: { ...axis, position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#dc2626', precision: 0 } } } }
+    });
+    new Chart(document.getElementById('dailyChart'), {
+        type: 'bar',
+        data: { labels: d.dayLabels, datasets: [
+            { label: 'Pre-ordered', data: d.preOrdered, backgroundColor: BLUE, borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+            { label: 'Attended', data: d.attended, backgroundColor: NAVY_MID, borderRadius: 6, borderSkipped: false, maxBarThickness: 26 }
+        ] },
+        options: { responsive: true, maintainAspectRatio: false, animation, interaction: { mode: 'index', intersect: false },
+            plugins: { legend, tooltip }, scales: { x: { ...axis, grid: { display: false } }, y: { ...axis, beginAtZero: true, ticks: { ...axis.ticks, precision: 0 } } } }
+    });
+    new Chart(document.getElementById('budgetChart'), {
+        type: 'bar',
+        data: { labels: ['Estimated', 'Actual'], datasets: [{ data: [d.estimated, d.actual], backgroundColor: [BLUE_DARK, d.actual > d.estimated ? '#dc2626' : NAVY], borderRadius: 10, borderSkipped: false, maxBarThickness: 30 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation,
+            plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { label: c => ' ' + rand(c.parsed.x) } } },
+            scales: { x: { ...axis, beginAtZero: true, ticks: { ...axis.ticks, callback: v => rand(v) } }, y: { ...axis, grid: { display: false }, ticks: { color: NAVY, font: { weight: '600' } } } } }
+    });
+})();
+</script>
+}

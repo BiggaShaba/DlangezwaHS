@@ -1,0 +1,53 @@
+@model LoginViewModel
+@{ ViewData["Title"] = "Sign In"; }
+
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="text-center mb-4">
+            <span style="font-size:3rem;color:#0B2A4A;"><i class="bi bi-shield-lock-fill"></i></span>
+            <h2 class="fw-bold mt-2" style="color:#0B2A4A;">Sign In</h2>
+            <p class="text-muted">Dlangezwa High School Portal</p>
+        </div>
+        <div class="card">
+            <div class="card-body p-4">
+                <form asp-action="Login" method="post">
+                    <input asp-for="ReturnUrl" type="hidden" />
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small"></div>
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label">Email or Learner ID</label>
+                        <input asp-for="Email" class="form-control" type="text" placeholder="your@email.com or Learner ID" autocomplete="username" autofocus />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Password" class="form-label">Password</label>
+                        <input asp-for="Password" class="form-control" type="password" />
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
+                    <div class="form-check mb-4">
+                        <input asp-for="RememberMe" class="form-check-input" type="checkbox" />
+                        <label asp-for="RememberMe" class="form-check-label text-muted small">Remember me</label>
+                    </div>
+                    <button type="submit" class="btn btn-dhs-primary w-100 py-2">
+                        <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+                    </button>
+                </form>
+            </div>
+        </div>
+        <p class="text-center mt-3 text-muted small mb-1">Learner? Ask your parent to create your login from their dashboard.</p>
+        <p class="text-center text-muted small">New parent?
+            <a asp-action="Register" class="fw-semibold" style="color:#0B2A4A;">Create an account</a>
+        </p>
+
+        <!-- Demo credentials hint -->
+        <div class="card mt-3 border-0" style="background:#f0f6fc;">
+            <div class="card-body py-2 px-3 small text-muted">
+                <strong>Demo:</strong><br/>
+                Admin: <code>admin@dlangezwa.edu.za</code><br/>
+                Parent: <code>demo.parent@example.com</code><br/>
+                Password: see README
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

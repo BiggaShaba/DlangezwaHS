@@ -1,0 +1,758 @@
+@using DlangezwaHS.Web.Models.Domain
+@{
+    ViewData["Title"] = "School Calendar";
+    int  year       = ViewBag.Year;
+    int  month      = ViewBag.Month;
+    bool isAdmin    = ViewBag.IsAdmin;
+    string role     = ViewBag.Role;
+    var   events    = (List<CalendarEvent>)ViewBag.Events;
+    var   grades    = (List<Grade>)ViewBag.Grades;
+    var   classes   = (List<Class>)ViewBag.Classes;
+    var   byDay     = (Dictionary<int, List<CalendarEvent>>)ViewBag.EventsByDay;
+
+    var firstDay    = new DateTime(year, month, 1);
+    int daysInMonth = DateTime.DaysInMonth(year, month);
+    // Monday-first offset (Mon=0 … Sun=6)
+    int startOffset = ((int)firstDay.DayOfWeek + 6) % 7;
+
+    int prevMonth = month == 1 ? 12 : month - 1;
+    int prevYear  = month == 1 ? year - 1 : year;
+    int nextMonth = month == 12 ? 1 : month + 1;
+    int nextYear  = month == 12 ? year + 1 : year;
+}
+
+<style>
+    :root {
+        --cal-bg:       #ffffff;
+        --cal-border:   #e5e7eb;
+        --cal-header:   #1e3a5f;
+        --cal-today:    #1e3a5f;
+        --cal-hover:    #f0f7ff;
+        --cal-text:     #111827;
+        --cal-muted:    #9ca3af;
+        --cal-dot-r:    5px;
+    }
+
+    .cal-wrap          { max-width: 1100px; margin: 0 auto; }
+
+    /* ── Header ── */
+    .cal-nav           { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+    .cal-nav h4        { font-weight:700; font-size:1.4rem; color:var(--cal-text); margin:0; letter-spacing:-.3px; }
+    .cal-nav-btn       { border:1px solid var(--cal-border); background:#fff; border-radius:6px;
+                         padding:6px 14px; font-size:.85rem; cursor:pointer; transition:background .15s;
+                         color:var(--cal-text); text-decoration:none; }
+    .cal-nav-btn:hover { background:var(--cal-hover); }
+
+    /* ── Legend ── */
+    .cal-legend        { display:flex; flex-wrap:wrap; gap:.6rem 1.2rem; margin-bottom:1.25rem; }
+    .cal-legend-item   { display:flex; align-items:center; gap:.4rem; font-size:.78rem; color:#374151; }
+    .cal-legend-dot    { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+    /* ── Grid ── */
+    .cal-grid          { border:1px solid var(--cal-border); border-radius:10px; overflow:hidden;
+                         box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    .cal-weekdays      { display:grid; grid-template-columns:repeat(7,1fr);
+                         background:var(--cal-header); }
+    .cal-weekday       { text-align:center; padding:10px 4px; font-size:.72rem;
+                         font-weight:600; color:#93c5fd; text-transform:uppercase; letter-spacing:.05em; }
+    .cal-days          { display:grid; grid-template-columns:repeat(7,1fr); }
+
+    .cal-cell          { min-height:110px; border-right:1px solid var(--cal-border);
+                         border-bottom:1px solid var(--cal-border); padding:8px 10px;
+                         position:relative; transition:background .15s; cursor:default;
+                         vertical-align:top; }
+    .cal-cell:nth-child(7n){ border-right:none; }
+    .cal-cell.other-month  { background:#fafafa; }
+    .cal-cell.today        { background:#eff6ff; }
+    .cal-cell.today .cal-day-num { background:var(--cal-today); color:#fff; }
+    .cal-cell.weekend      { background:#fafafa; }
+
+    @if (isAdmin) {
+        <text>
+    .cal-cell:hover        { background:var(--cal-hover); }
+    .cal-cell:hover .cal-add-btn { display:flex; }
+        </text>
+    }
+
+    .cal-day-num       { display:inline-flex; align-items:center; justify-content:center;
+                         width:26px; height:26px; border-radius:50%; font-size:.82rem;
+                         font-weight:600; color:var(--cal-text); margin-bottom:4px; transition:background .15s; }
+    .cal-day-num.weekend-num { color:var(--cal-muted); }
+
+    /* Add button (admin only, shows on hover) */
+    .cal-add-btn       { display:none; position:absolute; top:6px; right:8px;
+                         align-items:center; gap:4px; background:var(--cal-header);
+                         color:#fff; border:none; border-radius:5px;
+                         padding:3px 9px; font-size:.72rem; cursor:pointer;
+                         transition:opacity .15s; }
+    .cal-add-btn:hover { opacity:.85; }
+
+    /* Event pills */
+    .cal-event         { display:flex; align-items:center; gap:4px; border-radius:4px;
+                         padding:2px 6px; margin-bottom:3px; font-size:.7rem;
+                         font-weight:500; cursor:pointer; transition:opacity .15s;
+                         max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .cal-event:hover   { opacity:.8; }
+    .cal-event-dot     { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .cal-more          { font-size:.68rem; color:var(--cal-muted); margin-top:2px;
+                         cursor:pointer; }
+    .cal-more:hover    { color:var(--cal-text); }
+
+    /* ── Side panel ── */
+    .cal-side          { border:1px solid var(--cal-border); border-radius:10px; padding:0;
+                         overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06);
+                         position:sticky; top:80px; }
+    .cal-side-header   { background:var(--cal-header); padding:14px 20px; }
+    .cal-side-header h6{ color:#fff; margin:0; font-weight:600; font-size:.9rem; }
+    .cal-side-body     { padding:16px; max-height:600px; overflow-y:auto; }
+    .cal-event-card    { border-left:3px solid; border-radius:0 6px 6px 0;
+                         padding:10px 12px; margin-bottom:10px; background:#fafafa;
+                         cursor:pointer; transition:background .15s; }
+    .cal-event-card:hover { background:#f0f7ff; }
+    .cal-event-card h6 { margin:0 0 2px; font-size:.82rem; font-weight:600; color:var(--cal-text); }
+    .cal-event-card p  { margin:0; font-size:.74rem; color:#6b7280; }
+    .cal-event-badge   { display:inline-block; font-size:.65rem; font-weight:600;
+                         border-radius:20px; padding:1px 7px; color:#fff; margin-bottom:4px; }
+
+    /* ── Modals ── */
+    .modal-header      { background:var(--cal-header); color:#fff; }
+    .modal-header .btn-close { filter:invert(1); }
+    .event-type-btn    { border:2px solid var(--cal-border); border-radius:8px; padding:8px 12px;
+                         cursor:pointer; transition:all .15s; text-align:center; }
+    .event-type-btn:hover, .event-type-btn.selected { border-color:var(--cal-header); background:#eff6ff; }
+    .event-type-btn span { font-size:.72rem; font-weight:600; display:block; margin-top:4px; color:var(--cal-text); }
+</style>
+
+<div class="cal-wrap">
+    <!-- ── Navigation ── -->
+    <div class="cal-nav">
+        <div class="d-flex align-items-center gap-3">
+            <a href="@Url.Action("Index","Calendar",new{year=prevYear,month=prevMonth})"
+               class="cal-nav-btn">&larr;</a>
+            <h4>@ViewBag.MonthName</h4>
+            <a href="@Url.Action("Index","Calendar",new{year=nextYear,month=nextMonth})"
+               class="cal-nav-btn">&rarr;</a>
+            <a href="@Url.Action("Index","Calendar",new{year=DateTime.Today.Year,month=DateTime.Today.Month})"
+               class="cal-nav-btn" style="font-size:.78rem">Today</a>
+        </div>
+        @if (isAdmin)
+        {
+            <button class="btn btn-sm" style="background:var(--cal-header);color:#fff;"
+                    onclick="openAddModal(null)">
+                + Add Event
+            </button>
+        }
+    </div>
+
+    <!-- ── Legend ── -->
+    <div class="cal-legend">
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#ef4444"></div> Holiday</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#f59e0b"></div> Announcement</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#3b82f6"></div> Notice</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#10b981"></div> School Event</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#8b5cf6"></div> Assessment</div>
+    </div>
+
+    <div class="row g-3">
+        <!-- ── Calendar Grid ── -->
+        <div class="col-lg-9">
+            <div class="cal-grid">
+                <div class="cal-weekdays">
+                    @foreach (var d in new[]{"Mon","Tue","Wed","Thu","Fri","Sat","Sun"})
+                    {
+                        <div class="cal-weekday">@d</div>
+                    }
+                </div>
+                <div class="cal-days">
+                    @* Leading blanks *@
+                    @for (int i = 0; i < startOffset; i++)
+                    {
+                        <div class="cal-cell other-month"></div>
+                    }
+                    @* Actual days *@
+                    @for (int day = 1; day <= daysInMonth; day++)
+                    {
+                        var date      = new DateTime(year, month, day);
+                        bool isToday  = date == DateTime.Today;
+                        bool isWeekend= date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+                        var dayEvents = byDay.ContainsKey(day) ? byDay[day] : new List<CalendarEvent>();
+                        var shown     = dayEvents.Take(3).ToList();
+                        int extra     = dayEvents.Count - shown.Count;
+                        <div class="cal-cell @(isToday?"today":"") @(isWeekend?"weekend":"")"
+                             data-date="@date.ToString("yyyy-MM-dd")">
+
+                            <span class="cal-day-num @(isWeekend&&!isToday?"weekend-num":"")">@day</span>
+
+                            @if (isAdmin)
+                            {
+                                <button class="cal-add-btn"
+                                        onclick="openAddModal('@date.ToString("yyyy-MM-dd")')">
+                                    + Add
+                                </button>
+                            }
+
+                            @foreach (var ev in shown)
+                            {
+                                <div class="cal-event"
+                                     style="background:@ev.BadgeColor; border-left:3px solid @ev.BadgeColor; background:@ev.BadgeColor+18;"
+                                     onclick="viewEvent(@ev.Id)"
+                                     title="@ev.Title">
+                                    <div class="cal-event-dot" style="background:@ev.BadgeColor"></div>
+                                    @ev.Title
+                                </div>
+                            }
+                            @if (extra > 0)
+                            {
+                                <div class="cal-more" onclick="showDayEvents('@date.ToString("yyyy-MM-dd")')">+@extra more</div>
+                            }
+                        </div>
+                    }
+                    @* Trailing blanks to complete last row *@
+                    @{
+                        int total = startOffset + daysInMonth;
+                        int trail = total % 7 == 0 ? 0 : 7 - (total % 7);
+                    }
+                    @for (int i = 0; i < trail; i++)
+                    {
+                        <div class="cal-cell other-month"></div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Side Panel: all this month's events ── -->
+        <div class="col-lg-3">
+            <div class="cal-side">
+                <div class="cal-side-header">
+                    <h6>@(new DateTime(year, month, 1).ToString("MMMM")) Events</h6>
+                </div>
+                <div class="cal-side-body">
+                    @if (!events.Any())
+                    {
+                        <p class="text-muted small text-center mt-3">No events this month.</p>
+                    }
+                    @foreach (var ev in events)
+                    {
+                        <div class="cal-event-card" style="border-color:@ev.BadgeColor"
+                             onclick="viewEvent(@ev.Id)">
+                            <span class="cal-event-badge" style="background:@ev.BadgeColor">@ev.TypeLabel</span>
+                            <h6>@ev.Title</h6>
+                           <p>
+                            @ev.StartDate.ToString("dd MMM")
+                                @if (ev.EndDate != null && ev.EndDate != ev.StartDate)
+                                {
+                                    <span> &ndash; @ev.EndDate.Value.ToString("dd MMM")</span>
+                                }
+                           </p>
+                            @if (ev.GradeId != null || ev.ClassId != null)
+                            {
+                                <p style="color:#8b5cf6;font-size:.7rem">
+                                    @(ev.Class != null ? $"Class {ev.Class.Section}" : ev.Grade?.Name)
+                                </p>
+                            }
+                        </div>   
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ADD EVENT MODAL  (Admin only)
+════════════════════════════════════════════════════════════════════════════ -->
+@if (isAdmin)
+{
+    <div class="modal fade" id="addEventModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Calendar Event</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Event Type Picker -->
+                    <label class="form-label fw-semibold small">Event Type</label>
+                    <div class="d-flex gap-2 flex-wrap mb-3">
+                        @foreach (var type in (List<CalendarEventType>)ViewBag.EventTypes)
+                        {
+                            var icons = new Dictionary<CalendarEventType, string> {
+                                { CalendarEventType.Holiday,      "🏖️" },
+                                { CalendarEventType.Announcement, "📢" },
+                                { CalendarEventType.Notice,       "📋" },
+                                { CalendarEventType.SchoolEvent,  "🎉" }
+                            };
+                            <div class="event-type-btn @(type == CalendarEventType.SchoolEvent ? "selected" : "")"
+                                 onclick="selectType(this, @((int)type))">
+                                <div style="font-size:1.4rem">@icons[type]</div>
+                                <span>@type.ToString()</span>
+                            </div>
+                        }
+                    </div>
+                    <input type="hidden" id="selectedType" value="3" />
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Title <span class="text-danger">*</span></label>
+                        <input type="text" id="evTitle" class="form-control" placeholder="e.g. Heritage Day" maxlength="200" />
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Start Date <span class="text-danger">*</span></label>
+                            <input type="date" id="evStartDate" class="form-control" />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">End Date <span class="text-muted">(optional)</span></label>
+                            <input type="date" id="evEndDate" class="form-control" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Description <span class="text-muted">(optional)</span></label>
+                        <textarea id="evDesc" class="form-control" rows="3" placeholder="Additional details..."></textarea>
+                    </div>
+
+                    <!-- Visibility scope -->
+                    <div class="border rounded p-3 bg-light mb-1">
+                        <p class="small fw-semibold mb-2">Visibility <span class="text-muted fw-normal">(leave blank = visible to everyone)</span></p>
+                        <div class="row g-2">
+                            <div class="col-sm-6">
+                                <label class="form-label small">Grade only</label>
+                                <select id="evGrade" class="form-select form-select-sm" onchange="filterClassesByGrade()">
+                                    <option value="0">All Grades</option>
+                                    @foreach (var g in grades)
+                                    {
+                                        <option value="@g.Id">@g.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label small">Specific Class</label>
+                                <select id="evClass" class="form-select form-select-sm">
+                                    <option value="0">All Classes</option>
+                                    @foreach (var c in classes)
+                                    {
+                                        <option value="@c.Id" data-grade="@c.GradeId">@c.Grade?.Name @c.Section</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted" style="font-size:.72rem">
+                        📧 All affected users will receive an email notification automatically.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="submitBtn"
+                      class="btn btn-sm text-white" style="background:var(--cal-header)"
+                      onclick="handleSubmit()">
+                         Save to Calendar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     VIEW EVENT MODAL (all roles)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="viewEventModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" id="viewModalHeader">
+                <h5 class="modal-title" id="viewEventTitle">Event Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <span class="cal-event-badge mb-2 d-inline-block" id="viewEventBadge"></span>
+                <h5 id="viewEventTitleBody" class="fw-bold mb-1"></h5>
+                <p class="text-muted small mb-1">
+                    <i class="bi bi-calendar3 me-1"></i><strong>Date:</strong>
+                    <span id="viewEventDate"></span>
+                </p>
+                <p class="text-muted small mb-2" id="viewEventScopeRow"></p>
+                <div id="viewEventDesc" class="border-top pt-3 text-secondary small mb-0"></div>
+
+                <!-- Admin quick actions (School Events only) -->
+                <div id="adminEventActions" style="display:none"
+                     class="flex-wrap gap-2 border-top pt-3 mt-3">
+                    <a id="btnManage"  href="#" class="btn btn-sm btn-outline-primary">⚙️ Manage</a>
+                    <a id="btnScanner" href="#" class="btn btn-sm btn-outline-dark">📷 Scanner</a>
+                    <a id="btnSummary" href="#" class="btn btn-sm btn-outline-success">📊 Summary</a>
+                    <a id="btnGateQR"  href="#" class="btn btn-sm btn-outline-warning">🎫 Gate QR</a>
+                </div>
+
+                <!-- RSVP section (parents & teachers, School Events only) -->
+                <div id="rsvpSection" style="display:none" class="border-top pt-3 mt-3">
+                    <p class="fw-semibold small mb-2">🎟 Your Ticket</p>
+                    <div id="rsvpContent">
+                        <div class="text-center py-2">
+                            <div class="spinner-border spinner-border-sm text-primary"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm"
+                        data-bs-dismiss="modal">Close</button>
+                @if (isAdmin)
+                {
+                    <button type="button" class="btn btn-outline-danger btn-sm"
+                            id="deleteEventBtn" onclick="deleteEvent()">Delete</button>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // ── State ──────────────────────────────────────────────────────────────────
+    const IS_ADMIN     = @(isAdmin ? "true" : "false");
+    let   currentEventId = null;
+    let currentSchoolEventId = null;
+
+    // ── Open Add Modal ─────────────────────────────────────────────────────────
+    function openAddModal(dateStr) {
+        if (!IS_ADMIN) return;
+        document.getElementById('evTitle').value     = '';
+        document.getElementById('evDesc').value      = '';
+        document.getElementById('evStartDate').value = dateStr || '';
+        document.getElementById('evEndDate').value   = '';
+        document.getElementById('evGrade').value     = '0';
+        document.getElementById('evClass').value     = '0';
+        document.getElementById('selectedType').value = '3';
+
+        document.querySelectorAll('.event-type-btn').forEach(b => b.classList.remove('selected'));
+        document.querySelectorAll('.event-type-btn')[3]?.classList.add('selected');
+
+        new bootstrap.Modal(document.getElementById('addEventModal')).show();
+    }
+
+    // ── Type Picker ────────────────────────────────────────────────────────────
+    function selectType(el, typeVal) {
+        document.querySelectorAll('.event-type-btn').forEach(b => b.classList.remove('selected'));
+        el.classList.add('selected');
+        document.getElementById('selectedType').value = typeVal;
+
+          // Change button label for SchoolEvent (type 3)
+          const btn = document.getElementById('submitBtn');
+          btn.textContent = typeVal == 3 ? '⚙️ Manage Event' : 'Save to Calendar';
+
+    }
+
+    // ── Grade → Class filter ───────────────────────────────────────────────────
+    function filterClassesByGrade() {
+        const gradeId = document.getElementById('evGrade').value;
+        document.querySelectorAll('#evClass option').forEach(opt => {
+            if (opt.value === '0') { opt.style.display = ''; return; }
+            opt.style.display = (gradeId === '0' || opt.dataset.grade === gradeId) ? '' : 'none';
+        });
+        document.getElementById('evClass').value = '0';
+    }
+
+    // ── Submit New Event ───────────────────────────────────────────────────────
+    async function submitEvent() {
+        const title = document.getElementById('evTitle').value.trim();
+        const start = document.getElementById('evStartDate').value;
+        if (!title) { alert('Please enter a title.'); return; }
+        if (!start) { alert('Please select a start date.'); return; }
+
+        const form = new FormData();
+        form.append('title',       title);
+        form.append('description', document.getElementById('evDesc').value);
+        form.append('startDate',   start);
+        form.append('endDate',     document.getElementById('evEndDate').value);
+        form.append('type',        document.getElementById('selectedType').value);
+        form.append('gradeId',     document.getElementById('evGrade').value);
+        form.append('classId',     document.getElementById('evClass').value);
+        form.append('__RequestVerificationToken', getToken());
+
+        const btn = event.target;
+        btn.disabled = true; btn.textContent = 'Saving…';
+
+        const res  = await fetch('@Url.Action("Create","Calendar")', { method:'POST', body: form });
+        const data = await res.json();
+
+        btn.disabled = false; btn.textContent = 'Save to Calendar';
+
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('addEventModal')).hide();
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showToast(data.message, 'danger');
+        }
+
+    }
+
+    async function handleSubmit() {
+        const type = document.getElementById('selectedType').value;
+        if (type == 3) {
+            // Save skeleton calendar event first, then redirect to Manage page
+            await submitEventAndManage();
+        } else {
+            await submitEvent();  // existing function
+        }
+    }
+
+    // ── View Event ─────────────────────────────────────────────────────────────
+    async function viewEvent(id) {
+        currentEventId = id;
+        const res = await fetch('@Url.Action("GetEvent","Calendar")' + '?id=' + id);
+        if (!res.ok) { showToast('Could not load event.', 'danger'); return; }
+        const ev = await res.json();
+
+        // Admin clicking a School Event → go to Manage page
+        if (ev.type === 3 && IS_ADMIN) {
+            window.location.href = `/EventManagement/Manage?calendarEventId=${ev.id}`;
+            return;
+        }
+
+        // Populate common fields
+        document.getElementById('viewEventTitle').textContent      = ev.title;
+        document.getElementById('viewEventTitleBody').textContent  = ev.title;
+        document.getElementById('viewEventBadge').textContent      = ev.typeLabel;
+        document.getElementById('viewEventBadge').style.background = ev.badgeColor;
+        document.getElementById('viewEventDate').textContent =
+            new Date(ev.startDate).toLocaleDateString('en-ZA',
+                { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+        document.getElementById('viewEventDesc').textContent = ev.description || '—';
+
+        const scope = document.getElementById('viewEventScopeRow');
+        scope.textContent = (!ev.gradeId && !ev.classId) ? 'Visible to: Everyone'
+            : ev.classId ? 'Visible to: Specific class only'
+            : 'Visible to: Specific grade only';
+
+        const delBtn = document.getElementById('deleteEventBtn');
+        if (delBtn) {
+            if (ev.type === 4) {
+                // Assessments — never deletable from here
+                delBtn.style.display = 'none';
+            } else if (ev.type === 3 && IS_ADMIN) {
+                // School Events — admin can delete but with stronger warning
+                delBtn.style.display = '';
+                delBtn.onclick = () => deleteEventWithWarning(ev.title);
+            } else {
+                delBtn.style.display = '';
+                delBtn.onclick = deleteEvent;
+            }
+        }
+
+        // ── School Event extras ───────────────────────────────────────────────────
+        const rsvpSection  = document.getElementById('rsvpSection');
+        const adminActions = document.getElementById('adminEventActions');
+        if (rsvpSection)  rsvpSection.style.display  = 'none';
+        if (adminActions) adminActions.style.display = 'none';
+
+        if (ev.type === 3) {
+            // Non-admin: show RSVP section
+            if (!IS_ADMIN && rsvpSection) {
+                rsvpSection.style.display = 'block';
+                currentSchoolEventId = ev.schoolEventId;
+
+                // Check if already RSVP'd
+                if (ev.schoolEventId) {
+                    const tRes  = await fetch(`/EventManagement/GetMyTicketStatus?schoolEventId=${ev.schoolEventId}`);
+                    const tData = await tRes.json();
+                    renderRsvpState(tData);
+                } else {
+                    document.getElementById('rsvpContent').innerHTML =
+                        `<p class="text-muted small">This event is not yet open for RSVP.</p>`;
+                }
+            }
+            // Admin: show quick action buttons
+            if (IS_ADMIN && adminActions && ev.schoolEventId) {
+                adminActions.style.display = 'flex';
+                document.getElementById('btnManage').href   = `/EventManagement/Manage?calendarEventId=${ev.id}`;
+                document.getElementById('btnScanner').href  = `/EventManagement/Scanner?schoolEventId=${ev.schoolEventId}`;
+                document.getElementById('btnSummary').href  = `/EventManagement/Summary?schoolEventId=${ev.schoolEventId}`;
+                document.getElementById('btnGateQR').href   = `/EventManagement/GateQR?schoolEventId=${ev.schoolEventId}`;
+            } else if (IS_ADMIN && adminActions) {
+                // Calendar event exists but SchoolEvent not set up yet
+                adminActions.style.display = 'flex';
+                document.getElementById('btnManage').href   = `/EventManagement/Manage?calendarEventId=${ev.id}`;
+                document.getElementById('btnScanner').style.display = 'none';
+                document.getElementById('btnSummary').style.display  = 'none';
+                document.getElementById('btnGateQR').style.display   = 'none';
+            }
+        }
+
+        new bootstrap.Modal(document.getElementById('viewEventModal')).show();
+    }
+
+    function renderRsvpState(data) {
+        const el = document.getElementById('rsvpContent');
+        if (!data.isPublished) {
+            el.innerHTML = `<p class="text-muted small mb-0">⏳ This event is not yet open for RSVP.</p>`;
+            return;
+        }
+        if (data.isFull && !data.hasTicket) {
+            el.innerHTML = `<p class="text-danger small mb-0">❌ This event is fully booked.</p>`;
+            return;
+        }
+        if (data.hasTicket && data.ticketStatus === 'Used') {
+            el.innerHTML = `<p class="text-success small mb-0">✅ You attended this event.</p>`;
+            return;
+        }
+        if (data.hasTicket) {
+            el.innerHTML = `
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-success">✅ RSVP Confirmed</span>
+                </div>
+                <p class="small text-muted mb-2">Your unique QR ticket is ready. Present it at the entrance.</p>
+                <img src="${data.qrCodeUrl}" alt="Your QR Ticket"
+                     class="d-block mx-auto border border-2 rounded"
+                     style="width:180px;height:180px" />
+                <p class="text-center mt-2" style="font-size:.65rem;color:#9ca3af;font-family:monospace;word-break:break-all">
+                    ${data.ticketHash}
+                </p>
+                <p class="text-center mb-0" style="font-size:.72rem;background:#fef3c7;border-radius:6px;padding:6px 10px;color:#92400e">
+                    ⚠️ Single-use — do not share this QR code.
+                </p>
+                <div class="text-center mt-3">
+                    <button class="btn btn-sm btn-outline-danger" onclick="cancelRsvp()">Cancel RSVP</button>
+                </div>`;
+            return;
+        }
+        // Not yet RSVP'd
+        el.innerHTML = `
+            <p class="small text-muted mb-2">
+                Confirm your attendance to receive a unique QR ticket via email.
+                <strong>${data.spotsLeft} spot${data.spotsLeft !== 1 ? 's' : ''} remaining.</strong>
+            </p>
+            <button class="btn btn-sm w-100 text-white" style="background:#1e3a5f"
+                    onclick="doRsvp()">🎫 RSVP &amp; Get My Ticket</button>`;
+    }
+
+    async function doRsvp() {
+        if (!currentSchoolEventId) return;
+        const btn = document.querySelector('#rsvpContent button');
+        if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
+        const fd = new FormData();
+        fd.append('schoolEventId', currentSchoolEventId);
+        fd.append('__RequestVerificationToken', getToken());
+        const res  = await fetch('/EventManagement/RSVP', { method:'POST', body:fd });
+        const data = await res.json();
+        if (data.success) {
+            showToast('RSVP confirmed! Check your email for the ticket.', 'success');
+            renderRsvpState({
+                hasTicket: true, isPublished: true, ticketStatus: 'Unused',
+                qrCodeUrl: data.qrCodeUrl, ticketHash: data.ticketHash, spotsLeft: 0
+            });
+        } else {
+            showToast(data.message, 'danger');
+            if (btn) { btn.disabled = false; btn.textContent = '🎫 RSVP & Get My Ticket'; }
+        }
+    }
+
+    async function cancelRsvp() {
+        if (!currentSchoolEventId) return;
+        if (!confirm('Cancel your RSVP? Your ticket will be invalidated.')) return;
+        const fd = new FormData();
+        fd.append('schoolEventId', currentSchoolEventId);
+        fd.append('__RequestVerificationToken', getToken());
+        const res  = await fetch('/EventManagement/CancelRSVP', { method:'POST', body:fd });
+        const data = await res.json();
+        if (data.success) {
+            showToast('RSVP cancelled.', 'warning');
+            renderRsvpState({ hasTicket: false, isPublished: true, spotsLeft: 1 });
+        }
+    }
+
+    // ── Delete Event ───────────────────────────────────────────────────────────
+    async function deleteEvent() {
+        if (!currentEventId) return;
+        if (!confirm('Remove this event from the calendar?')) return;
+
+        const form = new FormData();
+        form.append('id', currentEventId);
+        form.append('__RequestVerificationToken', getToken());
+
+        const res  = await fetch('@Url.Action("Delete","Calendar")', { method:'POST', body: form });
+        const data = await res.json();
+
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('viewEventModal')).hide();
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showToast(data.message, 'danger');
+        }
+    }
+
+    // ── Show all events for a day ──────────────────────────────────────────────
+    function showDayEvents(dateStr) {
+        // Just navigate to that month (already on it) — future: day popup
+        const cell = document.querySelector(`[data-date="${dateStr}"]`);
+        if (cell) cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // ── Toast ──────────────────────────────────────────────────────────────────
+    function showToast(message, type) {
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} position-fixed top-0 end-0 m-3 shadow`;
+        toast.style.cssText = 'z-index:9999;min-width:260px;animation:fadeIn .2s';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+    }
+
+    function getToken() {
+        return document.querySelector('input[name="__RequestVerificationToken"]')?.value
+            || document.querySelector('meta[name="csrf-token"]')?.content || '';
+    }
+
+    async function submitEventAndManage() {
+        const title = document.getElementById('evTitle').value.trim();
+        const start = document.getElementById('evStartDate').value;
+        if (!title) { alert('Please enter a title.'); return; }
+        if (!start) { alert('Please select a start date.'); return; }
+
+        const form = new FormData();
+        form.append('title',       title);
+        form.append('description', document.getElementById('evDesc').value);
+        form.append('startDate',   start);
+        form.append('endDate',     document.getElementById('evEndDate').value);
+        form.append('type',        3);  // SchoolEvent
+        form.append('gradeId',     document.getElementById('evGrade').value);
+        form.append('classId',     document.getElementById('evClass').value);
+        form.append('__RequestVerificationToken', getToken());
+
+        const res  = await fetch('/Calendar/Create', { method:'POST', body: form });
+        const data = await res.json();
+
+        if (data.success) {
+            // Redirect to event management page with calendarEventId
+            window.location.href = `/EventManagement/Manage?calendarEventId=${data.id}`;
+        } else {
+            showToast(data.message, 'danger');
+        }
+    }
+
+    async function deleteEventWithWarning(title) {
+        if (!currentEventId) return;
+        const confirmed = confirm(
+            `⚠️ Delete "${title}"?\n\nThis will also remove all RSVPs, tickets and coordinator assignments. This cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        const form = new FormData();
+        form.append('id', currentEventId);
+        form.append('__RequestVerificationToken', getToken());
+
+        const res  = await fetch('@Url.Action("Delete","Calendar")', { method:'POST', body: form });
+        const data = await res.json();
+
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('viewEventModal')).hide();
+            showToast('Event deleted.', 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showToast(data.message, 'danger');
+        }
+    }
+</script>
+}

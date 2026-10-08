@@ -1,0 +1,68 @@
+@model LeaveRequestCreateViewModel
+@{ ViewData["Title"] = "Request Leave"; }
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-envelope-paper me-2"></i>Request Leave</h2>
+        <p>@Model.LearnerName · the housemaster reviews this before your learner may check out</p>
+    </div>
+    <a asp-action="LearnerOverview" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Back</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="k-card k-rise" style="--i:0">
+            <form asp-action="LeaveRequestCreate" method="post" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="LearnerId" />
+                <input type="hidden" asp-for="LearnerName" />
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+                <div class="mb-3">
+                    <label asp-for="Destination" class="k-label">Where are they going?</label>
+                    <input asp-for="Destination" class="form-control k-input" placeholder="e.g. Home — Umlazi" />
+                    <span asp-validation-for="Destination" class="text-danger small"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="Purpose" class="k-label">Why?</label>
+                    <input asp-for="Purpose" class="form-control k-input" placeholder="e.g. Family weekend visit" />
+                    <span asp-validation-for="Purpose" class="text-danger small"></span>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label asp-for="DepartureDate" class="k-label">Leaving on</label>
+                        <input asp-for="DepartureDate" type="date" class="form-control k-input" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        <span asp-validation-for="DepartureDate" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="ExpectedReturnDate" class="k-label">Back on</label>
+                        <input asp-for="ExpectedReturnDate" type="date" class="form-control k-input" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        <span asp-validation-for="ExpectedReturnDate" class="text-danger small"></span>
+                    </div>
+                </div>
+                <div class="k-sub mt-2" id="nights"></div>
+
+                <div class="d-flex gap-2 mt-4">
+                    <button type="submit" class="k-btn k-btn-primary px-4" data-busy-text="Sending…"><i class="bi bi-send"></i>Submit request</button>
+                    <a asp-action="LearnerOverview" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-ghost">Cancel</a>
+                </div>
+            </form>
+        </div>
+        <div class="d-flex gap-2 mt-3 k-sub k-rise" style="--i:1"><i class="bi bi-info-circle"></i>On the departure day the housemaster scans your learner's QR badge to check them out; returning after the expected date is flagged as late.</div>
+    </div>
+</div>
+
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+<script>
+    const dep = document.getElementById('DepartureDate'), ret = document.getElementById('ExpectedReturnDate'), out = document.getElementById('nights');
+    const show = () => {
+        if (!dep.value || !ret.value) { out.textContent = ''; return; }
+        const n = Math.round((new Date(ret.value) - new Date(dep.value)) / 86400000);
+        out.textContent = n < 0 ? 'The return date is before the departure date.' : n === 0 ? 'Same-day leave.' : `${n} night(s) away.`;
+        out.classList.toggle('text-danger', n < 0);
+        ret.min = dep.value;
+    };
+    dep.addEventListener('change', show); ret.addEventListener('change', show); show();
+</script>
+}

@@ -1,0 +1,153 @@
+@model LearnerDashboardViewModel
+@{
+    ViewData["Title"] = "My Dashboard";
+    var hour = DlangezwaHS.Web.Services.SchoolClock.Now.Hour;
+    var greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    var firstName = Model.LearnerName.Split(' ')[0];
+    var avgResult = Model.RecentResults.Where(r => r.Percentage is not null).Select(r => r.Percentage!.Value).DefaultIfEmpty().Average();
+    string TypeIcon(string t) => t switch { "Exam" => "bi-file-earmark-text", "Assignment" => "bi-pencil-square", _ => "bi-clipboard-check" };
+    string StatusPill(string s) => s switch { "Present" => "ok", "Absent" => "danger", _ => "warn" };
+}
+
+<style>
+    .ld-row { display: flex; align-items: center; gap: .8rem; padding: .65rem .75rem; border-radius: 14px; transition: background .2s, transform .25s var(--ease-spring); }
+    .ld-row:hover { background: var(--dhs-light); transform: translateX(4px); }
+    .ld-ico { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; flex-shrink: 0; font-size: 1.15rem; background: var(--dhs-light); color: var(--dhs-blue-dark); }
+    .ld-date { width: 46px; text-align: center; flex-shrink: 0; line-height: 1.05; }
+    .ld-date b { display: block; font-size: 1.15rem; color: var(--dhs-navy); }
+    .ld-date span { font-size: .68rem; text-transform: uppercase; color: var(--dhs-grey); letter-spacing: .05em; }
+    .ld-score { min-width: 64px; text-align: right; }
+    .ld-score b { font-size: 1.05rem; color: var(--dhs-navy); }
+    .ld-grade { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-weight: 800; flex-shrink: 0; }
+    .ld-grade.pass { background: #dcfce7; color: #166534; } .ld-grade.fail { background: #fee2e2; color: #b91c1c; }
+    .ld-days { display: flex; gap: .35rem; flex-wrap: wrap; }
+    .ld-day { width: 42px; text-align: center; padding: .4rem 0; border-radius: 12px; font-size: .7rem; font-weight: 700; transition: transform .25s var(--ease-spring); }
+    .ld-day:hover { transform: translateY(-3px); }
+    .ld-day b { display: block; font-size: .95rem; }
+    .ld-day.Present { background: #dcfce7; color: #166534; } .ld-day.Absent { background: #fee2e2; color: #b91c1c; } .ld-day.Late { background: #fef3c7; color: #92400e; }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-mortarboard me-2"></i>@greeting, @firstName</h2>
+        <p>@(Model.IsEnrolled ? $"Class {Model.ClassName}" : "Not yet enrolled")@(string.IsNullOrEmpty(Model.ParentName) ? "" : $" · linked to {Model.ParentName}")</p>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-people"></i>Class</div><div class="k-stat-value">@(Model.IsEnrolled ? Model.ClassName : "—")</div><div class="k-stat-note">@Model.Subjects.Count subject(s)</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat @(Model.AttendancePct >= 80 || Model.AttendanceDays == 0 ? "lunch" : "danger")"><div class="k-stat-label"><i class="bi bi-calendar-check"></i>Attendance</div>
+        <div class="k-stat-value">@if (Model.AttendanceDays == 0) { <span>—</span> } else { <span data-count="@Model.AttendancePct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)">@Model.AttendancePct.ToString("0")</span><span>%</span> }</div><div class="k-stat-note">last 30 days</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-bar-chart"></i>Recent average</div>
+        <div class="k-stat-value">@if (Model.RecentResults.Any()) { <span data-count="@avgResult.ToString("0", System.Globalization.CultureInfo.InvariantCulture)">@avgResult.ToString("0")</span><span>%</span> } else { <span>—</span> }</div><div class="k-stat-note">last @Model.RecentResults.Count result(s)</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat dinner"><div class="k-stat-label"><i class="bi bi-basket"></i>Meal orders</div><div class="k-stat-value" data-count="@Model.UpcomingMealOrders">@Model.UpcomingMealOrders</div><div class="k-stat-note">upcoming meals ordered</div></div></div>
+</div>
+
+<div class="k-section k-rise mt-0" style="--i:4">Quick actions</div>
+<div class="row g-3">
+    <div class="col-6 col-lg-4 col-xl-2 k-rise" style="--i:5">
+        <a class="k-tile primary" asp-action="AcademicReport"><i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-bar-chart" aria-hidden="true"></i></span><div><h3>Marks</h3><div class="sub">Term results &amp; grades</div></div></a>
+    </div>
+    <div class="col-6 col-lg-4 col-xl-2 k-rise" style="--i:6">
+        <a class="k-tile" asp-action="Assessments"><i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-pencil-square" aria-hidden="true"></i></span><div><h3>Assessments</h3><div class="sub">Tests, assignments &amp; exams</div></div>
+            @if (Model.UpcomingAssessments.Any()) { <span class="count">@Model.UpcomingAssessments.Count</span> }</a>
+    </div>
+    <div class="col-6 col-lg-4 col-xl-2 k-rise" style="--i:7">
+        <a class="k-tile" asp-action="PreOrder"><i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-basket" aria-hidden="true"></i></span><div><h3>Pre-Order</h3><div class="sub">Choose your meals</div></div></a>
+    </div>
+    <div class="col-6 col-lg-4 col-xl-2 k-rise" style="--i:8">
+        @if (Model.IsBoarder)
+        {
+            <a class="k-tile" asp-action="LearnerQr"><i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+                <span class="k-tile-icon"><i class="bi bi-qr-code" aria-hidden="true"></i></span><div><h3>QR Badge</h3><div class="sub">Boarding &amp; dining hall</div></div></a>
+        }
+        else
+        {
+            <div class="k-tile" style="opacity:.55;cursor:default" aria-disabled="true">
+                <span class="k-tile-icon"><i class="bi bi-qr-code" aria-hidden="true"></i></span><div><h3>QR Badge</h3><div class="sub">For boarding learners</div></div></div>
+        }
+    </div>
+    <div class="col-6 col-lg-4 col-xl-2 k-rise" style="--i:9">
+        <a class="k-tile" asp-controller="Timetable" asp-action="LearnerView"><i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-table" aria-hidden="true"></i></span><div><h3>Timetable</h3><div class="sub">Your class periods</div></div></a>
+    </div>
+    <div class="col-6 col-lg-4 col-xl-2 k-rise" style="--i:10">
+        <a class="k-tile" asp-controller="Calendar" asp-action="Index"><i class="bi bi-arrow-up-right go" aria-hidden="true"></i>
+            <span class="k-tile-icon"><i class="bi bi-calendar3" aria-hidden="true"></i></span><div><h3>Calendar</h3><div class="sub">Events &amp; assessments</div></div></a>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-6 k-rise" style="--i:11">
+        <div class="k-card h-100">
+            <div class="k-card-head">
+                <div><h3 class="k-title">Upcoming assessments</h3><p class="k-sub">What's coming up in your subjects</p></div>
+                <a asp-action="Assessments" class="k-btn k-btn-ghost k-btn-sm">See all</a>
+            </div>
+            @if (!Model.UpcomingAssessments.Any()) { <div class="k-empty"><i class="bi bi-emoji-smile"></i><strong>Nothing scheduled</strong><p>New tests and assignments will appear here.</p></div> }
+            @foreach (var a in Model.UpcomingAssessments)
+            {
+                var days = (a.Date.Date - DateTime.Today).Days;
+                <div class="ld-row">
+                    <div class="ld-date"><b>@a.Date.Day</b><span>@a.Date.ToString("MMM")</span></div>
+                    <span class="ld-ico"><i class="bi @TypeIcon(a.Type)"></i></span>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="fw-bold text-truncate" style="color:var(--dhs-navy)">@a.Name</div>
+                        <div class="k-sub">@a.Subject · @a.Type · @a.TotalMarks.ToString("0") marks</div>
+                    </div>
+                    <span class="k-pill @(days <= 3 ? "warn" : "")">@(days == 0 ? "Today" : days == 1 ? "Tomorrow" : $"in {days} days")</span>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="col-lg-6 k-rise" style="--i:12">
+        <div class="k-card h-100">
+            <div class="k-card-head">
+                <div><h3 class="k-title">Recent results</h3><p class="k-sub">Your latest marked work</p></div>
+                <a asp-action="AcademicReport" class="k-btn k-btn-ghost k-btn-sm">Term report</a>
+            </div>
+            @if (!Model.RecentResults.Any()) { <div class="k-empty"><i class="bi bi-clipboard2"></i><strong>No marks yet</strong><p>Results appear once your teachers capture them.</p></div> }
+            @foreach (var r in Model.RecentResults)
+            {
+                <div class="ld-row">
+                    <span class="ld-grade @(r.IsPassed == true ? "pass" : "fail")">@r.Grade</span>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="fw-bold text-truncate" style="color:var(--dhs-navy)">@r.Name</div>
+                        <div class="k-sub">@r.Subject · @r.Date.ToString("dd MMM")</div>
+                    </div>
+                    <div class="ld-score"><b>@r.Percentage?.ToString("0")%</b><div class="k-sub">@r.MarksObtained?.ToString("0")/@r.TotalMarks.ToString("0")</div></div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="k-card mt-3 k-rise" style="--i:13">
+    <div class="k-card-head">
+        <div><h3 class="k-title">Recent attendance</h3><p class="k-sub">Your last @Model.RecentAttendance.Count school day(s)</p></div>
+        <a asp-action="LearnerAttendance" class="k-btn k-btn-ghost k-btn-sm">Full history</a>
+    </div>
+    @if (!Model.RecentAttendance.Any())
+    {
+        <p class="k-sub mb-0">No attendance records yet.</p>
+    }
+    else
+    {
+        <div class="ld-days">
+            @foreach (var d in Model.RecentAttendance.OrderBy(d => d.Date))
+            {
+                <div class="ld-day @d.Status" title="@d.Date.ToString("dddd dd MMM") — @d.Status@(string.IsNullOrEmpty(d.Notes) ? "" : $" ({d.Notes})")">
+                    @d.Date.ToString("ddd")<b>@d.Date.Day</b>
+                </div>
+            }
+        </div>
+        <div class="d-flex gap-3 mt-3 k-sub">
+            <span><span class="k-pill ok">@Model.RecentAttendance.Count(d => d.Status == "Present")</span> present</span>
+            <span><span class="k-pill warn">@Model.RecentAttendance.Count(d => d.Status == "Late")</span> late</span>
+            <span><span class="k-pill danger">@Model.RecentAttendance.Count(d => d.Status == "Absent")</span> absent</span>
+        </div>
+    }
+</div>

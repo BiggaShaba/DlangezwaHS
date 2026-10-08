@@ -1,0 +1,110 @@
+@model DlangezwaHS.Web.ViewModels.ContactViewModel
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@{
+    ViewData["Title"] = "Contact Us";
+    var address = Config["School:Address"];
+    var phone   = Config["School:Phone"];
+    var phoneHref = phone?.Replace(" ", "");
+    var email   = Config["School:Email"];
+    var hours   = Config["School:OfficeHours"];
+    var mapQ    = Uri.EscapeDataString(Config["School:MapQuery"] ?? "Dlangezwa High School");
+}
+
+<div class="page-header">
+    <h1><i class="bi bi-chat-dots me-2"></i>Contact Us</h1>
+    <p>Questions about admissions, boarding, fees or anything else? We're here to help.</p>
+</div>
+
+<div class="row g-4">
+    <!-- Form -->
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header"><h5><i class="bi bi-envelope me-2"></i>Send us a message</h5></div>
+            <div class="card-body p-4">
+                <form asp-action="Contact" method="post" novalidate>
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="Name" class="form-label"></label>
+                            <input asp-for="Name" class="form-control" autocomplete="name" />
+                            <span asp-validation-for="Name" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Email" class="form-label"></label>
+                            <input asp-for="Email" class="form-control" autocomplete="email" />
+                            <span asp-validation-for="Email" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Phone" class="form-label"></label>
+                            <input asp-for="Phone" class="form-control" autocomplete="tel" />
+                            <span asp-validation-for="Phone" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Topic" class="form-label"></label>
+                            <select asp-for="Topic" class="form-select">
+                                <option>General enquiry</option>
+                                <option>Admissions</option>
+                                <option>Boarding</option>
+                                <option>Fees &amp; payments</option>
+                                <option>Transport</option>
+                                <option>Portal / login help</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="Message" class="form-label"></label>
+                            <textarea asp-for="Message" class="form-control" rows="6" placeholder="How can we help?"></textarea>
+                            <span asp-validation-for="Message" class="text-danger small"></span>
+                        </div>
+                        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <small class="text-muted">We usually reply within 2 working days.</small>
+                            <button type="submit" class="btn btn-dhs-primary px-4">
+                                <i class="bi bi-send me-2"></i>Send message
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details -->
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-body px-4 py-2">
+                <div class="contact-info">
+                    <div class="ico"><i class="bi bi-geo-alt"></i></div>
+                    <div><small>Address</small><span>@address</span></div>
+                </div>
+                <div class="contact-info">
+                    <div class="ico"><i class="bi bi-telephone"></i></div>
+                    <div><small>Phone</small><a href="tel:@phoneHref">@phone</a></div>
+                </div>
+                <div class="contact-info">
+                    <div class="ico"><i class="bi bi-envelope"></i></div>
+                    <div><small>Email</small><a href="mailto:@email">@email</a></div>
+                </div>
+                <div class="contact-info">
+                    <div class="ico"><i class="bi bi-clock"></i></div>
+                    <div><small>Office hours</small><span>@hours</span></div>
+                </div>
+            </div>
+        </div>
+        <iframe class="contact-map shadow-sm" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+                title="Map showing Dlangezwa High School"
+                src="https://maps.google.com/maps?q=@mapQ&amp;z=13&amp;output=embed"></iframe>
+    </div>
+</div>
+
+@if (User.Identity?.IsAuthenticated != true)
+{
+    <div class="lp-cta mt-5 py-4">
+        <h4 class="mb-2 fw-bold">Already part of the DHS family?</h4>
+        <p class="mb-3">Sign in to your portal, or sign up to start an application.</p>
+        <div class="d-flex justify-content-center flex-wrap gap-2">
+            <a asp-controller="Account" asp-action="Login" class="btn btn-outline-light px-4"><i class="bi bi-box-arrow-in-right me-1"></i>Sign In</a>
+            <a asp-controller="Account" asp-action="Register" class="btn btn-light px-4 fw-semibold" style="color:var(--dhs-navy);"><i class="bi bi-person-plus me-1"></i>Sign Up</a>
+        </div>
+    </div>
+}
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

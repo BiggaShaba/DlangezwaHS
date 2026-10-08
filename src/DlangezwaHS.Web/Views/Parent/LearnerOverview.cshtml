@@ -1,0 +1,305 @@
+@model LearnerOverviewViewModel
+@{
+    ViewData["Title"] = $"{Model.LearnerName} — Overview";
+    var selTerm = "Term 1";
+    var selYear = DateTime.UtcNow.Year;
+    var initials = string.Concat(Model.LearnerName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    var pct = Model.AttendancePct;
+    var payType = Model.RegistrationPaid ? "Accommodation" : "Registration";
+    var age = DateTime.Today.Year - Model.DateOfBirth.Year - (DateTime.Today.DayOfYear < Model.DateOfBirth.DayOfYear ? 1 : 0);
+}
+
+<style>
+    .lo-hero { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; }
+    .lo-avatar { width: 72px; height: 72px; border-radius: 22px; display: grid; place-items: center; font-size: 1.6rem; font-weight: 800; color: var(--dhs-navy);
+        background: linear-gradient(145deg, #fff, var(--dhs-blue)); box-shadow: 0 10px 24px -10px rgba(0,0,0,.4); }
+    .lo-meta { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; }
+    .lo-meta span { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2); border-radius: 99px; padding: .2rem .7rem; font-size: .8rem; }
+    .lo-tabs { display: flex; gap: .35rem; padding: .35rem; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient);
+        overflow-x: auto; margin-bottom: 1.4rem; position: relative; }
+    .lo-tabs .nav-link { border: 0; border-radius: 12px; padding: .55rem 1rem; color: var(--dhs-grey); font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: .4rem;
+        position: relative; z-index: 1; transition: color .25s; }
+    .lo-tabs .nav-link:hover { color: var(--dhs-navy); }
+    .lo-tabs .nav-link.active { color: #fff; background: transparent; }
+    .lo-ink { position: absolute; top: .35rem; bottom: .35rem; left: 0; width: 0; border-radius: 12px; z-index: 0;
+        background: linear-gradient(135deg, var(--dhs-navy), var(--dhs-navy-mid)); transition: left .4s var(--ease-spring), width .4s var(--ease-spring); }
+    .tab-pane.active { animation: k-rise .45s var(--ease-spring) both; }
+    .lo-big { font-size: 1.6rem; font-weight: 800; color: var(--dhs-navy); line-height: 1.1; }
+    .lo-subject { display: inline-flex; align-items: center; gap: .35rem; padding: .45rem .9rem; border-radius: 99px; background: var(--dhs-light); color: var(--dhs-navy);
+        font-weight: 600; font-size: .86rem; transition: transform .25s var(--ease-spring), background .2s; }
+    .lo-subject:hover { transform: translateY(-3px); background: #dbeafe; }
+    .lo-room { text-align: center; padding: 1.4rem; border-radius: 22px; background: linear-gradient(135deg, var(--dhs-navy), var(--dhs-navy-mid)); color: #fff; position: relative; overflow: hidden; }
+    .lo-room::after { content: ""; position: absolute; width: 220px; height: 220px; right: -60px; top: -90px; border-radius: 50%; background: radial-gradient(circle, rgba(151,200,233,.45), transparent 70%); }
+    .lo-room .num { font-size: 2.6rem; font-weight: 800; line-height: 1; position: relative; z-index: 1; }
+    .lo-room .lbl { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--dhs-blue); position: relative; z-index: 1; }
+    .lo-ring { width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto;
+        background: conic-gradient(var(--ring, #10b981) calc(var(--p, 0) * 1%), #e2e8f0 0); transition: --p 1.4s; }
+    .lo-ring > div { width: 92px; height: 92px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-size: 1.5rem; font-weight: 800; color: var(--dhs-navy); }
+    .lo-fee { display: flex; align-items: center; gap: .8rem; padding: .9rem 1rem; border-radius: 18px; border: 1px solid #e2e8f0; background: #fff; height: 100%; }
+    .lo-fee .ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 1.25rem; }
+    .lo-fee.paid .ico { background: #dcfce7; color: #166534; } .lo-fee.due .ico { background: #fee2e2; color: #b91c1c; } .lo-fee.na .ico { background: var(--dhs-light); color: var(--dhs-grey); }
+    @@property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
+</style>
+
+<div class="page-header k-header">
+    <div class="lo-hero">
+        <span class="lo-avatar" aria-hidden="true">@initials</span>
+        <div class="flex-grow-1">
+            <h2 class="mb-0">@Model.LearnerName</h2>
+            <div class="lo-meta">
+                <span><i class="bi bi-person-vcard me-1"></i>@Model.LearnerIdNumber</span>
+                @if (Model.IsEnrolled) { <span><i class="bi bi-people me-1"></i>@Model.ClassName</span> }
+                @if (Model.HasBed) { <span><i class="bi bi-house-door me-1"></i>@Model.RoomName · @Model.BedNumber</span> }
+                <span><i class="bi bi-gift me-1"></i>@age years</span>
+            </div>
+        </div>
+        <a asp-action="Index" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Dashboard</a>
+    </div>
+</div>
+
+<ul class="nav lo-tabs" id="learnerTabs" role="tablist">
+    <li class="nav-item" role="presentation"><a class="nav-link active" data-bs-toggle="tab" href="#tab-enrolment" role="tab"><i class="bi bi-person-badge"></i>Enrolment</a></li>
+    <li class="nav-item" role="presentation"><a class="nav-link" data-bs-toggle="tab" href="#tab-boarding" role="tab"><i class="bi bi-building"></i>Boarding &amp; Meals</a></li>
+    <li class="nav-item" role="presentation"><a class="nav-link" data-bs-toggle="tab" href="#tab-account" role="tab"><i class="bi bi-wallet2"></i>Account
+        @if (Model.BalanceDue > 0) { <span class="badge bg-danger rounded-pill">R@(Model.BalanceDue.ToString("N0"))</span> }</a></li>
+    <li class="nav-item" role="presentation"><a class="nav-link" data-bs-toggle="tab" href="#tab-attendance" role="tab"><i class="bi bi-calendar-check"></i>Attendance</a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Timetable" asp-action="ParentView" asp-route-learnerId="@Model.LearnerId" asp-route-term="@selTerm" asp-route-year="@selYear"><i class="bi bi-calendar3-week"></i>Timetable <i class="bi bi-box-arrow-up-right small"></i></a></li>
+    <li class="lo-ink" aria-hidden="true"></li>
+</ul>
+
+<div class="tab-content">
+
+    <!-- ── ENROLMENT ── -->
+    <div class="tab-pane fade show active" id="tab-enrolment" role="tabpanel">
+        @if (!Model.IsEnrolled)
+        {
+            <div class="k-empty"><i class="bi bi-hourglass-split"></i><strong>Not yet enrolled</strong><p>Waiting for the school to approve and enrol this learner.</p></div>
+        }
+        else
+        {
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="k-card h-100">
+                        <div class="k-label">Class</div>
+                        <div class="lo-big">@Model.ClassName</div>
+                        <div class="k-sub mb-3">@Model.GradeName</div>
+                        <div class="k-label">Enrolled</div>
+                        <div class="fw-semibold" style="color:var(--dhs-navy)">@Model.EnrolledDate?.ToString("dd MMMM yyyy")</div>
+                        <div class="d-flex gap-2 flex-wrap mt-3">
+                            <a asp-action="AcademicReport" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-bar-chart"></i>Academic report</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="k-card h-100">
+                        <div class="k-card-head"><div><h3 class="k-title">Registered subjects</h3><p class="k-sub">@Model.Subjects.Count subject(s)</p></div></div>
+                        @if (!Model.Subjects.Any()) { <p class="k-sub mb-0">No subjects assigned yet.</p> }
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var s in Model.Subjects) { <span class="lo-subject"><i class="bi bi-book"></i>@s</span> }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ── BOARDING & MEALS ── -->
+    <div class="tab-pane fade" id="tab-boarding" role="tabpanel">
+        @if (!Model.HasBed)
+        {
+            <div class="k-empty"><i class="bi bi-building"></i><strong>No accommodation allocated</strong><p>Contact the school administration if boarding is required.</p></div>
+        }
+        else
+        {
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="lo-room h-100">
+                        <div class="lbl">Room</div>
+                        <div class="num">@Model.RoomName</div>
+                        <div class="lbl mt-3">Bed</div>
+                        <div class="num" style="font-size:2rem">@Model.BedNumber</div>
+                        <div class="small mt-3" style="color:rgba(255,255,255,.75);position:relative;z-index:1">Since @Model.AllocatedDate?.ToString("dd MMM yyyy")</div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="row g-3">
+                        @foreach (var (action, icon, title, sub, route) in new[]
+                        {
+                            ("LeaveRequestCreate", "bi-envelope-paper", "Request leave", "Weekend or appointment", true),
+                            ("LearnerQr", "bi-qr-code", "QR badge", "Check-in & dining hall", true),
+                            ("DietaryProfile", "bi-clipboard2-pulse", "Dietary profile", "Allergies & needs", true),
+                            ("PreOrder", "bi-basket", "Pre-order meals", "Choose this week's meals", true),
+                            ("MealPlan", "bi-calendar3", "This week's menu", "What's being served", false)
+                        })
+                        {
+                            <div class="col-sm-6 col-xl-4">
+                                @if (route)
+                                {
+                                    <a class="k-tile" style="min-height:140px" asp-action="@action" asp-route-learnerId="@Model.LearnerId"><i class="bi bi-arrow-up-right go"></i>
+                                        <span class="k-tile-icon" style="width:48px;height:48px;font-size:1.4rem"><i class="bi @icon"></i></span><div><h3 style="font-size:1.05rem">@title</h3><div class="sub">@sub</div></div></a>
+                                }
+                                else
+                                {
+                                    <a class="k-tile" style="min-height:140px" asp-action="@action"><i class="bi bi-arrow-up-right go"></i>
+                                        <span class="k-tile-icon" style="width:48px;height:48px;font-size:1.4rem"><i class="bi @icon"></i></span><div><h3 style="font-size:1.05rem">@title</h3><div class="sub">@sub</div></div></a>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="k-card mt-3">
+                <div class="k-card-head"><div><h3 class="k-title">Leave requests</h3><p class="k-sub">@Model.LeaveRequests.Count request(s)</p></div>
+                    <a asp-action="LeaveRequestCreate" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-plus-lg"></i>New request</a></div>
+                @if (!Model.LeaveRequests.Any()) { <p class="k-sub mb-0">No leave requests submitted yet.</p> }
+                else
+                {
+                    <div class="k-table-wrap">
+                        <table class="k-table">
+                            <thead><tr><th>Destination</th><th>Dates</th><th>Status</th><th>Housemaster's note</th></tr></thead>
+                            <tbody id="leaveList" data-more-list data-more-initial="5" data-more-step="5">
+                            @foreach (var lr in Model.LeaveRequests)
+                            {
+                                var pill = lr.Status switch { "Approved" => "ok", "Rejected" => "danger", _ => "warn" };
+                                <tr data-more-item>
+                                    <td><div class="fw-semibold">@lr.Destination</div><div class="k-sub">@lr.Purpose</div></td>
+                                    <td class="text-nowrap">@lr.DepartureDate.ToString("dd MMM") → @lr.ExpectedReturnDate.ToString("dd MMM")</td>
+                                    <td><span class="k-pill @pill">@(lr.Status == "PendingHousemaster" ? "Pending" : lr.Status)</span></td>
+                                    <td><span class="k-sub">@(lr.HousemasterNotes ?? "—")</span></td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost k-btn-sm" data-more-btn="leaveList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- ── ACCOUNT ── -->
+    <div class="tab-pane fade" id="tab-account" role="tabpanel">
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="lo-fee @(Model.RegistrationPaid ? "paid" : "due")">
+                    <span class="ico"><i class="bi bi-receipt"></i></span>
+                    <div><div class="k-label mb-0">Registration fee</div><div class="fw-bold" style="color:var(--dhs-navy)">R@(Model.RegistrationFeeAmount.ToString("N0"))</div>
+                        <span class="k-pill @(Model.RegistrationPaid ? "ok" : "danger")">@(Model.RegistrationPaid ? "Paid" : "Outstanding")</span></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="lo-fee @(Model.AccommodationPaid ? "paid" : Model.HasBed ? "due" : "na")">
+                    <span class="ico"><i class="bi bi-house-door"></i></span>
+                    <div><div class="k-label mb-0">Accommodation fee</div><div class="fw-bold" style="color:var(--dhs-navy)">R@(Model.AccommodationFeeAmount.ToString("N0"))</div>
+                        <span class="k-pill @(Model.AccommodationPaid ? "ok" : Model.HasBed ? "danger" : "")">@(Model.AccommodationPaid ? "Paid" : Model.HasBed ? "Outstanding" : "Not boarding")</span></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="lo-fee @(Model.BalanceDue == 0 ? "paid" : "due")">
+                    <span class="ico"><i class="bi bi-wallet2"></i></span>
+                    <div class="flex-grow-1"><div class="k-label mb-0">Balance due</div><div class="lo-big" style="font-size:1.3rem;color:@(Model.BalanceDue > 0 ? "#b91c1c" : "#059669")">R@(Model.BalanceDue.ToString("N0"))</div></div>
+                    @if (Model.BalanceDue > 0)
+                    {
+                        <a asp-action="Pay" asp-route-learnerId="@Model.LearnerId" asp-route-type="@payType" class="k-btn k-btn-accent k-btn-sm"><i class="bi bi-credit-card"></i>Pay now</a>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="k-card">
+            <div class="k-card-head"><div><h3 class="k-title">Payment history</h3><p class="k-sub">@Model.Payments.Count payment(s)</p></div></div>
+            @if (!Model.Payments.Any()) { <p class="k-sub mb-0">No payments recorded yet.</p> }
+            else
+            {
+                <div class="k-table-wrap">
+                    <table class="k-table">
+                        <thead><tr><th>Type</th><th class="k-num">Amount</th><th>Method</th><th>Reference</th><th>Date</th><th>Status</th></tr></thead>
+                        <tbody id="payList" data-more-list data-more-initial="5" data-more-step="5">
+                        @foreach (var p in Model.Payments)
+                        {
+                            <tr data-more-item>
+                                <td class="fw-semibold">@p.Type</td>
+                                <td class="k-num fw-bold">R@(p.Amount.ToString("N2"))</td>
+                                <td><span class="k-sub">@(p.Method == "ManualBankTransfer" ? "EFT" : p.Method)</span></td>
+                                <td><code class="small">@p.Reference</code></td>
+                                <td class="text-nowrap">@(p.PaidDate?.ToString("dd MMM yyyy") ?? "—")</td>
+                                <td><span class="k-pill @(p.Status == "Completed" ? "ok" : p.Status == "Pending" ? "warn" : "danger")">@p.Status</span></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost k-btn-sm" data-more-btn="payList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+            }
+        </div>
+
+        <div class="k-card mt-3">
+            <div class="k-card-head"><div><h3 class="k-title">Proof of registration</h3><p class="k-sub">Official PDF, available once the registration fee is paid</p></div></div>
+            @if (!Model.Proofs.Any()) { <p class="k-sub mb-0"><i class="bi bi-info-circle me-1"></i>No proof generated yet.</p> }
+            @foreach (var pr in Model.Proofs)
+            {
+                <div class="d-flex align-items-center gap-3 p-2" style="border-radius:14px">
+                    <span class="lo-fee na" style="padding:0;border:0;height:auto"><span class="ico" style="background:#fee2e2;color:#dc2626"><i class="bi bi-file-earmark-pdf"></i></span></span>
+                    <div class="flex-grow-1"><div class="fw-semibold" style="color:var(--dhs-navy)">Proof of Registration</div><div class="k-sub">Generated @pr.GeneratedAt.ToString("dd MMM yyyy HH:mm")</div></div>
+                    <a asp-action="DownloadProof" asp-route-id="@pr.ProofId" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-download"></i>Download</a>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- ── ATTENDANCE ── -->
+    <div class="tab-pane fade" id="tab-attendance" role="tabpanel">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="k-card h-100 text-center">
+                    <div class="k-label">Last 30 days</div>
+                    <div class="lo-ring" data-ring="@pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)" style="--ring:@(pct >= 80 ? "#10b981" : pct >= 60 ? "#f59e0b" : "#dc2626")"><div>@(Model.TotalDays > 0 ? $"{pct:0}%" : "—")</div></div>
+                    <div class="k-sub mt-2">@Model.PresentDays of @Model.TotalDays school day(s) present</div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="row g-3">
+                    <div class="col-4"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check-circle"></i>Present</div><div class="k-stat-value" data-count="@Model.PresentDays">@Model.PresentDays</div></div></div>
+                    <div class="col-4"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-x-circle"></i>Absent</div><div class="k-stat-value" data-count="@Model.AbsentDays">@Model.AbsentDays</div></div></div>
+                    <div class="col-4"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-clock"></i>Late</div><div class="k-stat-value" data-count="@Model.LateDays">@Model.LateDays</div></div></div>
+                </div>
+                @if (Model.TotalDays == 0)
+                {
+                    <p class="k-sub mt-3">No attendance records for the last 30 days.</p>
+                }
+                else if (pct < 80)
+                {
+                    <div class="alert @(pct < 60 ? "alert-danger" : "alert-warning") py-2 small mt-3 mb-0" style="border-radius:14px">
+                        <i class="bi bi-exclamation-triangle me-1"></i>@(pct < 60 ? "Attendance is critically low. Please contact the school." : "Attendance is below 80%. Please ensure regular attendance.")
+                    </div>
+                }
+                <a asp-action="LearnerAttendance" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-primary mt-3"><i class="bi bi-clock-history"></i>Full attendance history</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // Sliding highlight behind the active tab
+    const tabs = document.getElementById('learnerTabs'), ink = tabs.querySelector('.lo-ink');
+    const move = () => {
+        const a = tabs.querySelector('.nav-link.active');
+        if (!a) return;
+        ink.style.left = a.offsetLeft + 'px'; ink.style.width = a.offsetWidth + 'px';
+    };
+    tabs.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => t.addEventListener('shown.bs.tab', () => {
+        move();
+        const pane = document.querySelector(t.getAttribute('href'));
+        window.kCountUp(pane); window.kInitMore(pane);
+        pane.querySelectorAll('[data-ring]').forEach(r => { r.style.setProperty('--p', 0); requestAnimationFrame(() => requestAnimationFrame(() => r.style.setProperty('--p', r.dataset.ring))); });
+    }));
+    window.addEventListener('resize', move);
+    move();
+    // Open a tab from the address (e.g. #tab-account)
+    if (location.hash && tabs.querySelector(`[href="${location.hash}"]`)) bootstrap.Tab.getOrCreateInstance(tabs.querySelector(`[href="${location.hash}"]`)).show();
+})();
+</script>
+}

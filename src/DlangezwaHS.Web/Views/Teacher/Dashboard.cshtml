@@ -1,0 +1,97 @@
+@model TeacherDashboardViewModel
+@{ ViewData["Title"] = "Teacher Dashboard"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-person-workspace me-2"></i>Teacher Dashboard</h2>
+    <p>Welcome, <strong>@Model.TeacherName</strong></p>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon navy"><i class="bi bi-building"></i></div>
+            <div><div class="stat-value">@Model.TotalClasses</div><div class="stat-label">My Classes</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-book"></i></div>
+            <div><div class="stat-value">@Model.TotalSubjects</div><div class="stat-label">Subjects</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon @(Model.PendingAttendance > 0 ? "orange" : "green")">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <div><div class="stat-value">@Model.PendingAttendance</div><div class="stat-label">Attendance Due</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon purple"><i class="bi bi-clipboard2-data"></i></div>
+            <div><div class="stat-value">@Model.TotalAssessments</div><div class="stat-label">Assessments</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Assigned Classes -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-grid-3x2-gap me-2"></i>My Assigned Classes &amp; Subjects</h5>
+        <a asp-action="MyClasses" class="btn btn-sm btn-dhs-secondary">View All</a>
+    </div>
+    <div class="card-body p-0">
+        @if (!Model.Assignments.Any())
+        {
+            <div class="p-4 text-center text-muted">No assignments yet. Contact Admin to assign classes.</div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Class</th><th>Subject</th><th>Actions</th></tr></thead>
+                <tbody>
+                @foreach (var a in Model.Assignments)
+                {
+                    <tr>
+                        <td><strong>@a.Class?.DisplayName</strong></td>
+                        <td><span class="badge" style="background:#dbeafe;color:#1e40af;">@a.Subject?.Name</span></td>
+                        <td class="d-flex gap-1 flex-wrap">
+                            <a asp-action="RecordAttendance" asp-route-classId="@a.ClassId"
+                               class="btn btn-sm btn-dhs-primary">
+                                <i class="bi bi-calendar-check me-1"></i>Attendance
+                            </a>
+                            <a asp-action="ClassLearners" asp-route-classId="@a.ClassId"
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-people me-1"></i>Learners
+                            </a>
+                            <a asp-action="ClassPerformance"
+                               asp-route-classId="@a.ClassId" asp-route-subjectId="@a.SubjectId"
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-bar-chart me-1"></i>Report
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h5></div>
+    <div class="card-body d-flex flex-wrap gap-2">
+        <a asp-action="Assessments" class="btn btn-dhs-primary">
+            <i class="bi bi-clipboard2-plus me-1"></i>Assessments
+        </a>
+        <a asp-action="CreateAssessment" class="btn btn-dhs-secondary">
+            <i class="bi bi-plus-circle me-1"></i>New Assessment
+        </a>
+        <a asp-action="MyClasses" class="btn btn-outline-secondary">
+            <i class="bi bi-grid me-1"></i>All Classes
+        </a>
+    </div>
+</div>

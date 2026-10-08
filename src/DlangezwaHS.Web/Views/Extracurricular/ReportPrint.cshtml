@@ -1,0 +1,65 @@
+@model ActivityReportViewModel
+@{ ViewData["Title"] = "Activity Report — Print"; }
+
+<style>
+    @@media print {
+        .navbar, .dhs-footer, .no-print { display: none !important; }
+        main { padding: 0 !important; }
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h4 class="mb-0">Print Preview</h4>
+    <button class="btn btn-dhs-primary" onclick="window.print()"><i class="bi bi-printer me-1"></i>Print</button>
+</div>
+
+<div class="text-center mb-4">
+    <h3>Dlangezwa High School</h3>
+    <h5>Extracurricular Activity Report</h5>
+    <p class="text-muted">Generated @DateTime.Now.ToString("dd MMM yyyy HH:mm")</p>
+</div>
+
+@if (Model.Report is not null)
+{
+    var r = Model.Report;
+    <table class="table table-bordered mb-4">
+        <tr><th>Total Activities</th><td>@r.TotalActivities</td><th>Total Participants</th><td>@r.TotalParticipants</td></tr>
+        <tr><th>Average Attendance</th><td>@r.AverageAttendancePct.ToString("N1")%</td><th>Total Achievements</th><td>@r.TotalAchievements</td></tr>
+    </table>
+
+    <h5>Attendance by Activity</h5>
+    <table class="table table-bordered mb-4">
+        <thead><tr><th>Activity</th><th>Sessions</th><th>Attendance %</th></tr></thead>
+        <tbody>
+        @foreach (var row in r.AttendanceByActivity)
+        { <tr><td>@row.ActivityName</td><td>@row.SessionCount</td><td>@row.AttendancePct.ToString("N1")%</td></tr> }
+        </tbody>
+    </table>
+
+    <h5>Top Achievers</h5>
+    <table class="table table-bordered mb-4">
+        <thead><tr><th>Learner</th><th>Achievements</th></tr></thead>
+        <tbody>
+        @foreach (var row in r.TopAchievers)
+        { <tr><td>@row.LearnerName</td><td>@row.Count</td></tr> }
+        </tbody>
+    </table>
+
+    <h5>Coach Summary</h5>
+    <table class="table table-bordered mb-4">
+        <thead><tr><th>Coach</th><th>Activities</th></tr></thead>
+        <tbody>
+        @foreach (var row in r.CoachSummary)
+        { <tr><td>@row.CoachName</td><td>@string.Join(", ", row.Activities)</td></tr> }
+        </tbody>
+    </table>
+
+    <h5>Participation Summary</h5>
+    <table class="table table-bordered mb-4">
+        <thead><tr><th>Learner</th><th>Activities</th></tr></thead>
+        <tbody>
+        @foreach (var row in r.ParticipationSummary)
+        { <tr><td>@row.LearnerName</td><td>@row.ActivityCount</td></tr> }
+        </tbody>
+    </table>
+}

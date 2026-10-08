@@ -1,0 +1,150 @@
+@model RecordUsageViewModel
+@{
+    ViewData["Title"] = "Usage & Leftovers";
+    var today = DlangezwaHS.Web.Services.SchoolClock.Today;
+    var sel = Model.Selected;
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+    var historyDays = Model.History.GroupBy(h => h.MealDate).OrderByDescending(g => g.Key).ToList();
+    var types = new[] { "Breakfast", "Lunch", "Dinner" };
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-fire me-2"></i>Ingredient Usage &amp; Leftovers</h2>
+        <p>Recorded automatically when a meal's collection is closed: prepared = pre-orders, leftovers = prepared − collected</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="MealScanner" class="k-btn k-btn-light"><i class="bi bi-qr-code-scan"></i>Meal Scanner</a>
+        <a asp-action="Inventory" class="k-btn k-btn-accent"><i class="bi bi-box-seam"></i>Inventory</a>
+    </div>
+</div>
+
+<div class="k-card k-rise" style="--i:0">
+    <div class="row g-3 align-items-end">
+        <div class="col-lg-5">
+            <form method="get" asp-action="RecordUsage" class="m-0">
+                <label class="k-label" for="mealSelect">Meal</label>
+                <select id="mealSelect" name="mealPlanItemId" class="form-select k-select" onchange="this.form.submit()">
+                    @if (!Model.Meals.Any()) { <option value="">No meals from the last week</option> }
+                    @foreach (var day in Model.Meals.GroupBy(m => m.Date))
+                    {
+                        <optgroup label="@day.Key.ToString("dddd dd MMM")@(day.Key == today ? " · today" : "")">
+                            @foreach (var m in day)
+                            {
+                                <option value="@m.MealPlanItemId" selected="@(Model.MealPlanItemId == m.MealPlanItemId)">@m.MealType — @m.MenuDescription@(m.IsRecorded ? " ✓" : "")</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+            </form>
+        </div>
+        @if (sel is not null)
+        {
+            var waste = sel.IsRecorded && sel.ConfirmedOrders > 0 ? (sel.Leftovers ?? 0) * 100.0 / sel.ConfirmedOrders : 0;
+            <div class="col-lg-7">
+                <div class="row g-2">
+                    <div class="col-4"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-fire"></i>Prepared</div><div class="k-stat-value" data-count="@sel.ConfirmedOrders">@sel.ConfirmedOrders</div><div class="k-stat-note">confirmed pre-orders</div></div></div>
+                    <div class="col-4"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-qr-code-scan"></i>Collected</div><div class="k-stat-value" data-count="@sel.Collected">@sel.Collected</div><div class="k-stat-note">scanned at the hall</div></div></div>
+                    <div class="col-4"><div class="k-stat @(waste > 10 ? "danger" : "breakfast")"><div class="k-stat-label"><i class="bi bi-recycle"></i>Leftovers</div><div class="k-stat-value">@(sel.IsRecorded ? sel.Leftovers.ToString() : "—")</div><div class="k-stat-note">@(sel.IsRecorded ? $"{waste:0}% of prepared" : "after collection closes")</div></div></div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (sel is not null)
+    {
+        <hr class="my-4" style="border-color:#e2e8f0" />
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+            <div class="d-flex gap-3 align-items-center">
+                @if (!string.IsNullOrEmpty(sel.ImageUrl)) { <img src="@sel.ImageUrl" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:14px" /> }
+                <div>
+                    <h3 class="k-title">@sel.MenuDescription</h3>
+                    <p class="k-sub"><span class="k-meal @sel.MealType.ToLowerInvariant() me-1"><i class="bi @TypeIcon(sel.MealType)"></i>@sel.MealType</span>@sel.Date.ToString("dddd dd MMM yyyy")</p>
+                </div>
+            </div>
+            @if (sel.IsRecorded)
+            {
+                <span class="k-pill ok"><i class="bi bi-check2-circle"></i>Deducted automatically</span>
+            }
+            else
+            {
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="k-pill warn"><i class="bi bi-hourglass-split"></i>Waiting for collection to close</span>
+                    @if (sel.Date == today) { <a asp-action="MealScanner" asp-route-mealPlanItemId="@sel.MealPlanItemId" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-qr-code-scan"></i>Open scanner</a> }
+                </div>
+            }
+        </div>
+        <div class="k-table-wrap">
+            <table class="k-table">
+                <thead><tr><th>Ingredient</th><th class="k-num">Per serving</th><th class="k-num">@(sel.IsRecorded ? "Deducted" : "Will deduct")</th><th class="k-num">In stock now</th></tr></thead>
+                <tbody>
+                @foreach (var r in Model.Recipe)
+                {
+                    var short_ = !sel.IsRecorded && r.Deducted > r.InStock;
+                    <tr>
+                        <td class="fw-semibold">@r.IngredientName</td>
+                        <td class="k-num k-sub">@r.QuantityPerServing.ToString("0.###") @r.Unit</td>
+                        <td class="k-num fw-bold" style="color:#b91c1c">−@r.Deducted.ToString("0.##") @r.Unit</td>
+                        <td class="k-num @(short_ ? "text-danger fw-bold" : "")">@r.InStock.ToString("0.##") @r.Unit @if (short_) { <i class="bi bi-exclamation-triangle-fill" title="Not enough in stock"></i> }</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+    else if (Model.Meals.Any())
+    {
+        <p class="k-sub mt-3 mb-0">Choose a meal to see what it uses.</p>
+    }
+</div>
+
+<div class="k-section k-rise" style="--i:1">Recent usage &amp; leftovers · by day</div>
+@if (!historyDays.Any())
+{
+    <div class="k-empty"><i class="bi bi-recycle"></i><strong>Nothing recorded yet</strong><p>Close a meal's collection at the scanner to record its usage and leftovers.</p></div>
+}
+<div id="historyList" data-more-list data-more-initial="5" data-more-step="5">
+    @foreach (var (day, idx) in historyDays.Select((d, i) => (d, i)))
+    {
+        var id = $"h-{day.Key:yyyyMMdd}";
+        var prepared = day.Sum(h => h.ServingsPrepared);
+        var left = day.Sum(h => h.LeftoverServings ?? 0);
+        var pct = prepared > 0 ? left * 100.0 / prepared : 0;
+        <div class="k-acc is-past" data-more-item>
+            <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="@(idx == 0 ? "true" : "false")" aria-controls="@id">
+                <span class="k-date" aria-hidden="true"><span><b>@day.Key.Day</b>@day.Key.ToString("MMM")</span></span>
+                <span class="flex-grow-1">
+                    <span class="k-acc-title d-block">@day.Key.ToString("dddd")</span>
+                    <span class="k-acc-meta">@day.Count() meal(s) · @prepared prepared · @day.Sum(h => h.Collected) collected</span>
+                </span>
+                <span class="text-end me-1" style="min-width:110px">
+                    <span class="d-block fw-bold @(pct > 10 ? "text-danger" : "")" style="font-size:1.1rem">@left left over</span>
+                    <span class="k-meter d-block mt-1"><span class="@(pct > 10 ? "danger" : "")" data-pct="@pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"></span></span>
+                </span>
+                <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="collapse @(idx == 0 ? "show" : "")" id="@id">
+                <div class="k-acc-body">
+                    <div class="k-table-wrap">
+                        <table class="k-table">
+                            <thead><tr><th>Meal</th><th>Menu</th><th class="k-num">Prepared</th><th class="k-num">Collected</th><th class="k-num">Leftovers</th></tr></thead>
+                            <tbody>
+                            @foreach (var h in day.OrderBy(h => Array.IndexOf(types, h.MealType)).ThenBy(h => h.MenuDescription))
+                            {
+                                <tr title="@h.Deducted">
+                                    <td><span class="k-meal @h.MealType.ToLowerInvariant()"><i class="bi @TypeIcon(h.MealType)"></i>@h.MealType</span></td>
+                                    <td class="fw-semibold">@h.MenuDescription</td>
+                                    <td class="k-num">@h.ServingsPrepared</td>
+                                    <td class="k-num">@h.Collected</td>
+                                    <td class="k-num fw-bold @(h.LeftoverServings > h.ServingsPrepared * 0.1 ? "text-danger" : "")">@(h.LeftoverServings?.ToString() ?? "—")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+<div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="historyList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more days</button></div>

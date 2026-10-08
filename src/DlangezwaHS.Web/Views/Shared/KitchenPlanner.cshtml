@@ -1,0 +1,204 @@
+@model KitchenPlannerViewModel
+@{
+    ViewData["Title"] = "Schedule Kitchen Teams";
+    var back = ViewBag.BackAction as string ?? "KitchenSchedule";
+    var meals = Model.Days.SelectMany(d => d.Services).SelectMany(s => s.Meals).ToList();
+    var scheduled = meals.Count(m => m.Scheduled.Any());
+    var unpublished = meals.SelectMany(m => m.Scheduled).Count(s => !s.IsPublished);
+    var portions = meals.Sum(m => m.Portions);
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+    var teamsJson = System.Text.Json.JsonSerializer.Serialize(Model.Teams.Select(t => new { t.Id, t.Name, size = t.Members.Count }),
+        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+}
+
+<style>
+    .kp-day { margin-bottom: 1.6rem; }
+    .kp-day-head { display: flex; align-items: center; gap: .8rem; margin-bottom: .8rem; }
+    .kp-service { height: 100%; border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); overflow: visible; position: relative;
+        transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; }
+    .kp-service:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); border-color: var(--k-accent); }
+    .kp-service.breakfast { --k-accent: var(--k-breakfast); --k-soft: var(--k-breakfast-bg); --k-ink: var(--k-breakfast-fg); }
+    .kp-service.lunch { --k-accent: var(--k-lunch); --k-soft: var(--k-lunch-bg); --k-ink: var(--k-lunch-fg); }
+    .kp-service.dinner { --k-accent: var(--k-dinner); --k-soft: var(--k-dinner-bg); --k-ink: var(--k-dinner-fg); }
+    .kp-service-head { display: flex; justify-content: space-between; align-items: center; padding: .85rem 1.1rem; border-radius: 22px 22px 0 0; background: var(--k-soft); color: var(--k-ink); }
+    .kp-service-head .title { font-weight: 800; display: flex; align-items: center; gap: .45rem; }
+    .kp-meal { padding: .9rem 1.1rem; border-top: 1px solid #f1f5f9; }
+    .kp-meal:first-of-type { border-top: 0; }
+    .kp-meal-name { font-weight: 700; color: var(--dhs-navy); }
+    .kp-sched { display: grid; grid-template-columns: auto 1fr auto; gap: .2rem .7rem; align-items: center; padding: .6rem .75rem; border-radius: 14px; background: var(--dhs-light);
+        margin-top: .5rem; font-size: .82rem; animation: k-rise .45s var(--ease-spring) both; }
+    .kp-sched .ico { grid-row: span 2; width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--k-accent); color: #fff; }
+    .kp-sched .team { font-weight: 700; color: var(--dhs-navy); }
+    .kp-sched .meta { grid-column: 2; color: var(--dhs-grey); }
+    .kp-sched .side { grid-row: span 2; text-align: right; }
+    .kp-pick .dropdown-menu { border-radius: 16px; padding: .4rem; min-width: 260px; box-shadow: var(--shadow-pop); border: 1px solid #e2e8f0; }
+    .kp-pick .dropdown-menu.show { animation: kp-drop .22s var(--ease-spring); }
+    @@keyframes kp-drop { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+    .kp-team { width: 100%; display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border: 0; border-radius: 12px; background: none; text-align: left; transition: background .15s; }
+    .kp-team:hover:not(:disabled), .kp-team:focus-visible { background: var(--dhs-light); outline: none; }
+    .kp-team:disabled { opacity: .5; }
+    .kp-team .k-avatar { width: 34px; height: 34px; border-radius: 11px; font-size: .75rem; }
+    .kp-confirm { padding: .6rem; border-radius: 12px; background: #fff7ed; font-size: .8rem; color: #9a3412; }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-calendar-plus me-2"></i>Schedule Kitchen Teams</h2>
+        <p>Pick a team under each meal — staff numbers, shift and prep time are worked out for you</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="@back" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Back</a>
+        <a asp-action="KitchenTeams" class="k-btn k-btn-accent"><i class="bi bi-people"></i>Kitchen Teams</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-egg-fried"></i>Upcoming meals</div><div class="k-stat-value" data-count="@meals.Count">@meals.Count</div><div class="k-stat-note">over @Model.Days.Count day(s)</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Scheduled</div><div class="k-stat-value" id="statScheduled" data-count="@scheduled">@scheduled</div><div class="k-stat-note">meals with a team</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-send"></i>Not published</div><div class="k-stat-value" id="statUnpublished" data-count="@unpublished">@unpublished</div><div class="k-stat-note">staff not notified yet</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-basket"></i>Portions</div><div class="k-stat-value" data-count="@portions">@portions</div><div class="k-stat-note">confirmed pre-orders</div></div></div>
+</div>
+
+@if (!Model.Teams.Any())
+{
+    <div class="alert alert-warning">No active kitchen teams yet — <a asp-action="KitchenTeams" class="alert-link">create a team</a> first.</div>
+}
+@if (!Model.Days.Any())
+{
+    <div class="k-empty"><i class="bi bi-calendar-x"></i><strong>No upcoming meals</strong><p>Meals appear here once a week's menu is published.</p></div>
+}
+
+@foreach (var (day, di) in Model.Days.Select((d, i) => (d, i)))
+{
+    var isToday = day.Date == Model.Today;
+    <section class="kp-day k-rise" style="--i:@(Math.Min(di + 4, 12))">
+        <div class="kp-day-head">
+            <span class="k-date" aria-hidden="true"><span><b>@day.Date.Day</b>@day.Date.ToString("MMM")</span></span>
+            <div>
+                <div class="k-acc-title">@day.Date.ToString("dddd") @if (isToday) { <span class="badge bg-primary ms-1">Today</span> }</div>
+                <div class="k-sub">@day.Services.Sum(s => s.Meals.Count) meal(s) · @day.Services.SelectMany(s => s.Meals).Sum(m => m.Portions) portions</div>
+            </div>
+        </div>
+        <div class="row g-3">
+            @foreach (var svc in day.Services)
+            {
+                var key = svc.MealType.ToLowerInvariant();
+                <div class="col-lg-4">
+                    <div class="kp-service @key">
+                        <div class="kp-service-head">
+                            <span class="title"><i class="bi @TypeIcon(svc.MealType)"></i>@svc.MealType</span>
+                            <span class="small fw-semibold"><i class="bi bi-clock me-1"></i>@svc.ShiftStart–@svc.ShiftEnd</span>
+                        </div>
+                        @foreach (var m in svc.Meals)
+                        {
+                            <div class="kp-meal" data-meal="@m.MealPlanItemId">
+                                <div class="d-flex justify-content-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="kp-meal-name text-truncate">@m.MenuDescription</div>
+                                        <div class="k-sub">@m.Portions portions · needs ~@m.StaffRecommended staff · @m.PrepMinutesPerServing.ToString("0.#") min/serving</div>
+                                    </div>
+                                </div>
+                                <div data-scheduled>
+                                    @foreach (var s in m.Scheduled)
+                                    {
+                                        <partial name="_KitchenPlannerSchedule" model="s" />
+                                    }
+                                </div>
+                                <div class="dropdown kp-pick mt-2">
+                                    <button type="button" class="k-btn @(m.Scheduled.Any() ? "k-btn-ghost" : "k-btn-primary") k-btn-sm w-100" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" data-pick-btn>
+                                        <i class="bi @(m.Scheduled.Any() ? "bi-plus-lg" : "bi-calendar-plus")"></i><span>@(m.Scheduled.Any() ? "Add another team" : "Schedule")</span>
+                                    </button>
+                                    <div class="dropdown-menu">
+                                        <div class="k-label px-2 pt-1">Choose a team</div>
+                                        @foreach (var t in Model.Teams)
+                                        {
+                                            var taken = m.Scheduled.Any(s => s.TeamName == t.Name);
+                                            <button type="button" class="kp-team" data-team="@t.Id" disabled="@taken">
+                                                <span class="k-avatar" aria-hidden="true">@string.Concat(t.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])))</span>
+                                                <span class="flex-grow-1"><span class="fw-semibold d-block" style="color:var(--dhs-navy)">@t.Name</span>
+                                                    <span class="k-sub">@t.Members.Count staff@(t.Members.Count < m.StaffRecommended ? " · short" : "") · ~@(t.Members.Count > 0 ? Math.Ceiling(m.Portions * m.PrepMinutesPerServing / t.Members.Count) : 0) min</span></span>
+                                                @if (taken) { <i class="bi bi-check2 text-success"></i> }
+                                            </button>
+                                        }
+                                        <div class="kp-confirm mt-1" data-confirm hidden></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]').value;
+    const quickUrl = '@Url.Action("QuickSchedule")', publishUrl = '@Url.Action("PublishKitchenSchedule")';
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const bump = (id, d) => { const el = document.getElementById(id); el.textContent = Math.max(0, Number(el.textContent) + d); };
+
+    function scheduleHtml(s) {
+        return `<div class="kp-sched" data-schedule="${s.scheduleId}">
+            <span class="ico"><i class="bi bi-people-fill"></i></span>
+            <span class="team">${esc(s.teamName)}</span>
+            <span class="side">${s.isPublished ? '<span class="k-pill ok">Published</span>'
+                : `<button type="button" class="k-btn k-btn-primary k-btn-sm" data-publish="${s.scheduleId}"><i class="bi bi-send"></i>Publish</button>`}</span>
+            <span class="meta"><i class="bi bi-clock me-1"></i>${esc(s.shift)} · <i class="bi bi-stopwatch me-1"></i>~${s.estimatedMinutes} min prep · ${s.staffCount}/${s.staffRecommended} staff</span>
+        </div>`;
+    }
+
+    async function post(url, data) {
+        const fd = new FormData();
+        Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+        fd.append('__RequestVerificationToken', TOKEN);
+        const res = await fetch(url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        return res.json();
+    }
+
+    async function schedule(btn, acknowledge) {
+        const meal = btn.closest('[data-meal]'), menu = btn.closest('.dropdown-menu'), confirm = menu.querySelector('[data-confirm]');
+        btn.disabled = true;
+        const r = await post(quickUrl, { mealPlanItemId: meal.dataset.meal, teamId: btn.dataset.team, acknowledgeUnderstaff: acknowledge });
+        if (r.needsConfirm) {
+            confirm.hidden = false;
+            confirm.innerHTML = `<div class="mb-2"><i class="bi bi-exclamation-triangle me-1"></i>${esc(r.message)}</div>
+                <button type="button" class="k-btn k-btn-primary k-btn-sm" data-yes>Schedule anyway</button>`;
+            confirm.querySelector('[data-yes]').addEventListener('click', () => { confirm.hidden = true; schedule(btn, true); });
+            btn.disabled = false;
+            return;
+        }
+        if (!r.success) { confirm.hidden = false; confirm.textContent = r.message; btn.disabled = false; return; }
+
+        const list = meal.querySelector('[data-scheduled]');
+        if (!list.children.length) bump('statScheduled', 1);
+        list.insertAdjacentHTML('beforeend', scheduleHtml(r.schedule));
+        bump('statUnpublished', 1);
+        btn.insertAdjacentHTML('beforeend', '<i class="bi bi-check2 text-success"></i>');
+        confirm.hidden = true;
+        const pick = meal.querySelector('[data-pick-btn]');
+        pick.classList.replace('k-btn-primary', 'k-btn-ghost');
+        pick.querySelector('span').textContent = 'Add another team';
+        pick.querySelector('i').className = 'bi bi-plus-lg';
+        bootstrap.Dropdown.getOrCreateInstance(pick).hide();
+        window.kToast(`${r.schedule.teamName} scheduled — publish to notify the team.`);
+    }
+
+    document.addEventListener('click', async e => {
+        const team = e.target.closest('[data-team]');
+        if (team && !team.disabled) { schedule(team, false); return; }
+        const pub = e.target.closest('[data-publish]');
+        if (pub) {
+            pub.classList.add('is-busy'); pub.disabled = true;
+            const r = await post(publishUrl, { id: pub.dataset.publish });
+            if (r.success) { pub.outerHTML = '<span class="k-pill ok">Published</span>'; bump('statUnpublished', -1); window.kToast('Published — the team has been emailed.'); }
+            else { pub.classList.remove('is-busy'); pub.disabled = false; }
+        }
+    });
+})();
+</script>
+}

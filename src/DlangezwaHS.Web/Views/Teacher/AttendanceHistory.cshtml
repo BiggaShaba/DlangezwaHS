@@ -1,0 +1,59 @@
+@model IList<AttendanceSummaryRow>
+@{
+    ViewData["Title"] = "Attendance History";
+    var cls     = ViewBag.Class as Class;
+    var classId = (int)ViewBag.ClassId;
+    DateTime from = ViewBag.FromDate;
+    DateTime to   = ViewBag.ToDate;
+}
+
+<div class="page-header">
+    <h2><i class="bi bi-clock-history me-2"></i>@cls?.DisplayName — Attendance History</h2>
+    <p>@from.ToString("dd MMM yyyy") — @to.ToString("dd MMM yyyy")</p>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form method="get" class="row g-2 align-items-end">
+            <input type="hidden" name="classId" value="@classId" />
+            <div class="col-auto"><label class="form-label small">From</label>
+                <input type="date" name="from" value="@from.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+            <div class="col-auto"><label class="form-label small">To</label>
+                <input type="date" name="to" value="@to.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+            <div class="col-auto"><button type="submit" class="btn btn-dhs-primary btn-sm">Filter</button></div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-dhs mb-0">
+            <thead>
+                <tr>
+                    <th>Learner</th>
+                    <th class="text-center text-success">Present</th>
+                    <th class="text-center text-danger">Absent</th>
+                    <th class="text-center text-warning">Late</th>
+                    <th class="text-center">Total Days</th>
+                    <th class="text-center">Attendance %</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var row in Model)
+            {
+                var pct = row.AttendancePct;
+                var css = pct >= 80 ? "text-success" : pct >= 60 ? "text-warning" : "text-danger";
+                <tr>
+                    <td><strong>@row.LearnerName</strong></td>
+                    <td class="text-center"><span class="badge bg-success">@row.Present</span></td>
+                    <td class="text-center"><span class="badge bg-danger">@row.Absent</span></td>
+                    <td class="text-center"><span class="badge bg-warning text-dark">@row.Late</span></td>
+                    <td class="text-center">@row.Total</td>
+                    <td class="text-center fw-bold @css">@pct%</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

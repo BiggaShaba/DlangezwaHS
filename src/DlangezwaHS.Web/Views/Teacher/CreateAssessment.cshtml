@@ -1,0 +1,91 @@
+@model CreateAssessmentViewModel
+@{ ViewData["Title"] = Model.Id.HasValue ? "Edit Assessment" : "New Assessment"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Assessments">Assessments</a></li>
+        <li class="breadcrumb-item active">@(Model.Id.HasValue ? "Edit" : "New")</li>
+    </ol></nav>
+    <h2><i class="bi bi-clipboard2-plus me-2"></i>@(Model.Id.HasValue ? "Edit Assessment" : "New Assessment")</h2>
+</div>
+
+<div class="row justify-content-center">
+<div class="col-lg-7">
+<div class="card">
+    <div class="card-body p-4">
+        <form asp-action="CreateAssessment" method="post">
+            @Html.AntiForgeryToken()
+            <input asp-for="Id" type="hidden" />
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+            <div class="mb-3">
+                <label asp-for="Name" class="form-label">Assessment Name <span class="text-danger">*</span></label>
+                <input asp-for="Name" class="form-control" placeholder="e.g. Term 1 Mathematics Test" />
+                <span asp-validation-for="Name" class="text-danger small"></span>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label asp-for="Type" class="form-label">Type <span class="text-danger">*</span></label>
+                    <select asp-for="Type" class="form-select">
+                        <option value="Test">Test</option>
+                        <option value="Assignment">Assignment</option>
+                        <option value="Exam">Exam</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="Term" class="form-label">Term <span class="text-danger">*</span></label>
+                    <select asp-for="Term" class="form-select">
+                        @foreach (var t in new[]{"Term 1","Term 2","Term 3","Term 4"})
+                        { <option value="@t">@t</option> }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="TotalMarks" class="form-label">Total Marks <span class="text-danger">*</span></label>
+                    <input asp-for="TotalMarks" class="form-control" type="number" min="1" max="1000" />
+                    <span asp-validation-for="TotalMarks" class="text-danger small"></span>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label asp-for="ClassId" class="form-label">Class <span class="text-danger">*</span></label>
+                    <select asp-for="ClassId" class="form-select" required>
+                        <option value="">— Select Class —</option>
+                        @foreach (var a in Model.Assignments.GroupBy(a => a.ClassId).Select(g => g.First()))
+                        {
+                            <option value="@a.ClassId">@a.Class?.DisplayName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="SubjectId" class="form-label">Subject <span class="text-danger">*</span></label>
+                    <select asp-for="SubjectId" class="form-select" required>
+                        <option value="">— Select Subject —</option>
+                        @foreach (var a in Model.Assignments.GroupBy(a => a.SubjectId).Select(g => g.First()))
+                        {
+                            <option value="@a.SubjectId">@a.Subject?.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label asp-for="Date" class="form-label">Assessment Date <span class="text-danger">*</span></label>
+                <input asp-for="Date" class="form-control" type="date" />
+                <span asp-validation-for="Date" class="text-danger small"></span>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-dhs-primary px-4">
+                    <i class="bi bi-check me-1"></i>Save &amp; Capture Marks
+                </button>
+                <a asp-action="Assessments" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

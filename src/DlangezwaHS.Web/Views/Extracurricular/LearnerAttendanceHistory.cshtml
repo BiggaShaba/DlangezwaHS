@@ -1,0 +1,36 @@
+@model IList<ActivityAttendance>
+@{ ViewData["Title"] = "Activity Attendance History"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-calendar-check me-2"></i>@ViewBag.LearnerName — Activity Attendance</h2>
+    <p>@(((DateTime)ViewBag.FromDate).ToString("dd MMM yyyy")) – @(((DateTime)ViewBag.ToDate).ToString("dd MMM yyyy"))</p>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">No activity attendance recorded in this period.</div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Date</th><th>Activity</th><th>Status</th><th>Note</th></tr></thead>
+                <tbody>
+                @foreach (var a in Model)
+                {
+                    var css = a.Status == ActivityAttendanceStatus.Present ? "badge-approved"
+                            : a.Status == ActivityAttendanceStatus.Absent ? "badge-rejected"
+                            : "badge-pending";
+                    <tr>
+                        <td>@a.ActivitySession.Date.ToString("dd MMM yyyy")</td>
+                        <td>@a.ActivitySession.Activity.Name</td>
+                        <td><span class="badge rounded-pill @css">@a.Status</span></td>
+                        <td>@a.Note</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

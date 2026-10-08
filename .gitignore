@@ -1,0 +1,36 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+publish/
+logs/
+
+## User secrets (NEVER commit)
+**/appsettings.Production.json
+**/secrets.json
+
+## Uploads / generated PDFs (managed outside repo)
+**/wwwroot/uploads/
+**/wwwroot/proofs/
+# Private uploads: supplier receipts, dietary/medical documents
+**/App_Data/receipts/
+**/App_Data/dietary-documents/
+
+## EF migrations backup (optional)
+# Migrations/
+
+## Rider / VS
+.idea/
+*.DotSettings.user
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Generated compliance reports (contain learner data)
+**/wwwroot/reports/
+
+## Local Claude Code settings
+.claude/settings.local.json

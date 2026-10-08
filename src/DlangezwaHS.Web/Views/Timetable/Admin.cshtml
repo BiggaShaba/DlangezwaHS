@@ -1,0 +1,527 @@
+@model TimetableGridVm?
+@using DlangezwaHS.Web.Services
+@{
+    ViewData["Title"] = "Timetable Editor";
+    var classes      = ViewBag.Classes      as IList<Class>     ?? new List<Class>();
+    var terms        = ViewBag.Terms        as string[]         ?? Array.Empty<string>();
+    var allSubjects  = ViewBag.AllSubjects  as IList<Subject>   ?? new List<Subject>();
+    var allColors    = ViewBag.AllColors    as Dictionary<int,string> ?? new Dictionary<int,string>();
+    var selectedTerm = (string)(ViewBag.Term   ?? "Term 1");
+    var selectedYear = (int)(ViewBag.AcademicYear ?? DateTime.UtcNow.Year);
+    var classId      = (int?)ViewBag.ClassId;
+    var days         = new[] { (1,"Monday"), (2,"Tuesday"), (3,"Wednesday"), (4,"Thursday"), (5,"Friday") };
+}
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.27/dist/interact.min.js"></script>
+<script>
+// ── Data passed from server ────────────────────────────────────────────────
+const ANTI_FORGERY = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+const SELECTED_CLASS  = @(classId?.ToString() ?? "null");
+const SELECTED_TERM   = '@Html.Raw(selectedTerm)';
+const SELECTED_YEAR   = @selectedYear;
+
+// Serialise existing slots into JS: { "day_period": {slotId, subjectId, subjectName, teacherName, color} }
+const INITIAL_SLOTS = {
+@if (Model != null)
+{
+    foreach (var slot in Model.AllSlots)
+    {
+        var color = Model.SubjectColors.TryGetValue(slot.SubjectId, out var c) ? c : "#5ea8d3";
+        @:  "@(slot.Day)_@(slot.PeriodNumber)": { slotId: @slot.Id, subjectId: @slot.SubjectId,
+        @:      subjectName: "@Html.Raw(slot.Subject?.Name ?? "")",
+        @:      teacherName: "@Html.Raw(slot.Teacher?.FullName ?? "")",
+        @:      color: "@color" },
+    }
+}
+};
+
+// ── Subject colours live map (updated by colour pickers) ──────────────────
+const subjectColors = {
+@foreach (var kv in allColors) { @:  @kv.Key: "@kv.Value",
+}
+};
+
+// ── Drag-and-drop setup with interact.js ──────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+
+    // Restore saved slots
+    Object.entries(INITIAL_SLOTS).forEach(([key, data]) => {
+        renderSlot(key, data);
+    });
+
+    // Make subject cards in the left panel draggable
+    interact('.subject-card').draggable({
+        inertia: false,
+        autoScroll: true,
+        listeners: {
+            start(event) {
+                event.target.classList.add('dragging');
+                event.target.style.zIndex = 9999;
+            },
+            move(event) {
+                const el = event.target;
+                const x = (parseFloat(el.getAttribute('data-x')) || 0) + event.dx;
+                const y = (parseFloat(el.getAttribute('data-y')) || 0) + event.dy;
+                el.style.transform = `translate(${x}px, ${y}px)`;
+                el.setAttribute('data-x', x);
+                el.setAttribute('data-y', y);
+            },
+            end(event) {
+                const el = event.target;
+                el.classList.remove('dragging');
+                el.style.transform = '';
+                el.style.zIndex = '';
+                el.removeAttribute('data-x');
+                el.removeAttribute('data-y');
+            }
+        }
+    });
+
+    // Make timetable cells droppable
+    interact('.tt-cell').dropzone({
+        accept: '.subject-card',
+        overlap: 0.3,
+        ondragenter(event) {
+            event.target.classList.add('drop-active');
+        },
+        ondragleave(event) {
+            event.target.classList.remove('drop-active');
+        },
+        async ondrop(event) {
+            event.target.classList.remove('drop-active');
+            const cell       = event.target;
+            const card       = event.relatedTarget;
+            const day        = parseInt(cell.dataset.day);
+            const period     = parseInt(cell.dataset.period);
+            const subjectId  = parseInt(card.dataset.subjectId);
+            const teacherId  = parseInt(card.dataset.teacherId);
+            const key        = `${day}_${period}`;
+
+            if (!SELECTED_CLASS) { showToast('Please select a class first.', 'warning'); return; }
+
+            // Optimistic UI: show spinner in cell
+            cell.innerHTML = `<div class="tt-spinner"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
+
+            const color = subjectColors[subjectId] ?? '#5ea8d3';
+            const result = await apiCall('/Timetable/SaveSlot', {
+                classId: SELECTED_CLASS, day, period,
+                subjectId, teacherId,
+                term: SELECTED_TERM, year: SELECTED_YEAR
+            });
+
+            if (result.success) {
+                renderSlot(key, {
+                    slotId: result.slotId,
+                    subjectId, color,
+                    subjectName: result.subjectName,
+                    teacherName: result.teacherName
+                });
+                showToast(`${result.subjectName} placed on ${getDayName(day)}, Period ${period}`, 'success');
+            } else {
+                cell.innerHTML = '';
+                showToast(result.message, 'danger');
+            }
+        }
+    });
+});
+
+// ── Render a filled slot into a cell ──────────────────────────────────────
+function renderSlot(key, data) {
+    const cell = document.querySelector(`.tt-cell[data-key="${key}"]`);
+    if (!cell) return;
+
+    const initials = data.subjectName?.split(' ').map(w => w[0]).join('').substring(0, 3).toUpperCase() ?? '?';
+    const textColor = isColorDark(data.color) ? '#fff' : '#000';
+
+    cell.innerHTML = `
+        <div class="tt-filled" style="background:${data.color}; color:${textColor};"
+             data-slot-id="${data.slotId}" title="${data.subjectName} — ${data.teacherName}">
+            <span class="tt-initials">${initials}</span>
+            <span class="tt-subject">${data.subjectName ?? ''}</span>
+            <span class="tt-teacher">${data.teacherName ?? ''}</span>
+            <button class="tt-remove-btn" onclick="removeSlot(event, ${data.slotId}, '${key}')"
+                    title="Remove">×</button>
+        </div>`;
+}
+
+// ── Remove a slot ─────────────────────────────────────────────────────────
+async function removeSlot(event, slotId, key) {
+    event.stopPropagation();
+    if (!confirm('Remove this period?')) return;
+    const result = await apiCall('/Timetable/RemoveSlot', { slotId });
+    if (result.success) {
+        const cell = document.querySelector(`.tt-cell[data-key="${key}"]`);
+        if (cell) cell.innerHTML = '';
+        showToast('Period removed.', 'success');
+    } else {
+        showToast(result.message, 'danger');
+    }
+}
+
+// ── AJAX helper ───────────────────────────────────────────────────────────
+async function apiCall(url, data) {
+    const params = new URLSearchParams(data);
+    params.append('__RequestVerificationToken', ANTI_FORGERY);
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        });
+        return await res.json();
+    } catch {
+        return { success: false, message: 'Network error.' };
+    }
+}
+
+// ── Colour picker change ──────────────────────────────────────────────────
+async function updateColor(subjectId, hex) {
+    subjectColors[subjectId] = hex;
+    // Refresh all rendered cells for this subject
+    document.querySelectorAll('.tt-filled').forEach(el => {
+        const cell = el.closest('.tt-cell');
+        if (!cell) return;
+        const key = cell.dataset.key;
+        if (INITIAL_SLOTS[key]?.subjectId == subjectId) {
+            INITIAL_SLOTS[key].color = hex;
+            renderSlot(key, INITIAL_SLOTS[key]);
+        }
+    });
+    // Also update the card on the left
+    const card = document.querySelector(`.subject-card[data-subject-id="${subjectId}"]`);
+    if (card) card.style.borderLeftColor = hex;
+
+    await apiCall('/Timetable/SaveColor', { subjectId, hex });
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────
+function getDayName(d) { return ['','Monday','Tuesday','Wednesday','Thursday','Friday'][d]; }
+function isColorDark(hex) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return (r*299 + g*587 + b*114) / 1000 < 128;
+}
+function showToast(msg, type='info') {
+    const c = document.getElementById('toastContainer');
+    const id = 'toast_' + Date.now();
+    c.insertAdjacentHTML('beforeend', `
+        <div id="${id}" class="toast align-items-center text-bg-${type} border-0 show mb-2" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">${msg}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                    onclick="document.getElementById('${id}').remove()"></button>
+            </div>
+        </div>`);
+    setTimeout(() => document.getElementById(id)?.remove(), 4000);
+}
+</script>
+
+<style>
+/* ─── Layout ────────────────────────────────────────────────────────────── */
+.tt-layout          { display: flex; gap: 1.25rem; align-items: flex-start; }
+.tt-sidebar         { width: 230px; flex-shrink: 0; position: sticky; top: 80px; }
+.tt-main            { flex: 1; overflow-x: auto; }
+
+/* ─── Subject cards (left panel) ───────────────────────────────────────── */
+.subject-card {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: .55rem .75rem;
+    border-radius: 8px; border-left: 5px solid var(--card-color, #5ea8d3);
+    background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.08);
+    cursor: grab; user-select: none; touch-action: none;
+    transition: box-shadow .15s, opacity .15s;
+    margin-bottom: .5rem;
+}
+.subject-card:hover  { box-shadow: 0 4px 14px rgba(0,0,0,.16); }
+.subject-card.dragging { opacity: .75; cursor: grabbing; }
+.sc-name   { font-weight: 600; font-size: .85rem; color: #1e293b; }
+.sc-teacher{ font-size: .75rem; color: #64748b; }
+.sc-class  { font-size: .72rem; color: #94a3b8; }
+
+/* ─── Timetable grid ────────────────────────────────────────────────────── */
+.tt-table { border-collapse: separate; border-spacing: 3px; min-width: 680px; }
+.tt-table th {
+    background: var(--dhs-navy); color: #fff;
+    font-size: .8rem; font-weight: 600; text-align: center;
+    padding: .5rem .4rem; border-radius: 6px; white-space: nowrap;
+}
+.tt-time-col { width: 90px; font-size: .73rem; color: #64748b;
+    text-align: right; padding-right: .6rem; white-space: nowrap; }
+
+/* Period rows */
+.tt-cell {
+    width: 130px; height: 62px; border-radius: 7px;
+    background: #f0f6fc; border: 2px dashed #cce0f0;
+    vertical-align: top; position: relative;
+    transition: background .15s, border-color .15s;
+}
+.tt-cell.drop-active { background: #dbeeff !important; border-color: var(--dhs-blue-dark) !important; border-style: solid !important; }
+.tt-cell.unavailable { background: #f1f5f9; border-color: #e2e8f0; }
+
+/* Filled cell */
+.tt-filled {
+    position: absolute; inset: 0; border-radius: 6px;
+    padding: 5px 8px; display: flex; flex-direction: column;
+    gap: 1px; overflow: hidden;
+}
+.tt-initials { font-size: .7rem; font-weight: 800; opacity: .8; }
+.tt-subject  { font-size: .8rem; font-weight: 700; line-height: 1.1; }
+.tt-teacher  { font-size: .68rem; opacity: .85; }
+.tt-remove-btn {
+    position: absolute; top: 3px; right: 4px;
+    background: rgba(0,0,0,.2); border: none; border-radius: 50%;
+    width: 16px; height: 16px; font-size: .65rem; line-height: 1;
+    cursor: pointer; display: none; color: inherit;
+    padding: 0;
+}
+.tt-filled:hover .tt-remove-btn { display: block; }
+
+/* Break rows */
+.tt-break-row td { background: #fef9e7; font-size: .75rem; font-weight: 600;
+    color: #b7791f; text-align: center; padding: .3rem; border-radius: 6px; }
+
+/* Assembly rows */
+.tt-assembly-row td { background: #e8f0fe; font-size: .75rem; font-weight: 600;
+    color: #1a56db; text-align: center; padding: .3rem; border-radius: 6px; }
+
+/* Spinner */
+.tt-spinner { display: flex; align-items: center; justify-content: center; height: 100%; }
+
+/* Toast container */
+#toastContainer { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; min-width: 260px; }
+</style>
+}
+
+<form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
+
+<!-- Toast container -->
+<div id="toastContainer"></div>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-calendar3-week me-2 text-primary"></i>Timetable Editor</h2>
+        <small class="text-muted">Drag subjects from the left panel onto the grid</small>
+    </div>
+</div>
+
+<!-- Class / Term / Year selector -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form method="get" asp-action="Admin" class="row g-2 align-items-end">
+            <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Class</label>
+                <select name="classId" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">— Select Class —</option>
+                    @foreach (var cls in classes)
+                    {
+                        <option value="@cls.Id" selected="@(classId == cls.Id)">@cls.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Term</label>
+                <select name="term" class="form-select form-select-sm" onchange="this.form.submit()">
+                    @foreach (var t in terms)
+                    {
+                        <option value="@t" selected="@(selectedTerm == t)">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Year</label>
+                <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+                    @foreach (var y in Enumerable.Range(DateTime.UtcNow.Year - 1, 3))
+                    {
+                        <option value="@y" selected="@(selectedYear == y)">@y</option>
+                    }
+                </select>
+            </div>
+            @if (classId.HasValue)
+            {
+                <div class="col-sm-3">
+                    <a asp-controller="Timetable" asp-action="Admin"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-x-circle me-1"></i>Clear
+                    </a>
+                </div>
+            }
+        </form>
+    </div>
+</div>
+
+@if (classId == null)
+{
+    <div class="text-center py-5">
+        <i class="bi bi-calendar3-week fs-1 text-muted d-block mb-3"></i>
+        <h5 class="text-muted">Select a class to start editing</h5>
+        <p class="text-muted small">Choose a class from the dropdown above to load its timetable.</p>
+    </div>
+}
+else
+{
+    <div class="tt-layout">
+
+        <!-- ─── LEFT PANEL: Subject cards ──────────────────────────────────── -->
+        <div class="tt-sidebar">
+            <div class="card">
+                <div class="card-header py-2">
+                    <h6 class="mb-0"><i class="bi bi-grid-3x3-gap me-2"></i>Subjects to Assign</h6>
+                </div>
+                <div class="card-body p-2" style="max-height:calc(100vh - 220px); overflow-y:auto;">
+
+                    @if (Model?.AvailableAssignments.Any() == true)
+                    {
+                        @foreach (var a in Model.AvailableAssignments.OrderBy(x => x.Subject?.Name))
+                        {
+                            var color = Model.SubjectColors.TryGetValue(a.SubjectId, out var sc) ? sc : "#5ea8d3";
+                            <div class="subject-card"
+                                 data-subject-id="@a.SubjectId"
+                                 data-teacher-id="@a.TeacherId"
+                                 style="--card-color: @color;">
+                                <span class="sc-name">@a.Subject?.Name</span>
+                                <span class="sc-teacher"><i class="bi bi-person me-1"></i>@a.Teacher?.FullName</span>
+                                <span class="sc-class"><i class="bi bi-mortarboard me-1"></i>@a.Class?.DisplayName</span>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted small p-2 mb-0">
+                            No teacher-subject assignments found for this class.
+                            Go to <strong>Settings → Teachers</strong> to assign teachers to subjects and classes.
+                        </p>
+                    }
+
+                </div>
+            </div>
+
+            <!-- Colour customiser -->
+            <div class="card mt-3">
+                <div class="card-header py-2">
+                    <h6 class="mb-0"><i class="bi bi-palette me-2"></i>Subject Colours</h6>
+                </div>
+                <div class="card-body p-2" style="max-height:180px; overflow-y:auto;">
+                    @foreach (var s in allSubjects)
+                    {
+                        var col = allColors.TryGetValue(s.Id, out var ac) ? ac : "#5ea8d3";
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <input type="color" value="@col" class="form-control form-control-color p-0 border-0"
+                                   style="width:24px; height:24px; border-radius:4px; cursor:pointer;"
+                                   onchange="updateColor(@s.Id, this.value)"
+                                   title="@s.Name colour" />
+                            <span class="small text-truncate" style="max-width:140px;">@s.Name</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── RIGHT PANEL: Timetable grid ───────────────────────────────── -->
+        <div class="tt-main">
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="mb-0">
+                        <i class="bi bi-table me-2"></i>
+                        @(Model?.SelectedClass?.DisplayName ?? "") — @selectedTerm @selectedYear
+                    </h5>
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Drop a card onto a slot • Click × to remove
+                    </small>
+                </div>
+                <div class="card-body p-2">
+                <table class="tt-table w-100">
+                    <thead>
+                        <tr>
+                            <th class="tt-time-col" style="background:transparent; color:#64748b;"></th>
+                            @foreach (var (d, dName) in days)
+                            {
+                                <th>@dName</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        <!-- Assembly row (visual only — not a draggable period) -->
+                        <tr class="tt-assembly-row">
+                            <td class="tt-time-col" style="background:transparent; color:#1a56db;">08:30–09:00</td>
+                            @foreach (var (d, _) in days)
+                            {
+                                if (d == 1 || d == 5)
+                                {
+                                    <td colspan="1">
+                                        <i class="bi bi-megaphone-fill me-1"></i>Assembly
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td style="background:transparent;"></td>
+                                }
+                            }
+                        </tr>
+
+                        @foreach (var period in SchoolDay.Periods)
+                        {
+                            <!-- Insert break before period 3 and period 6 -->
+                                var breakBefore = SchoolDay.Breaks.FirstOrDefault(b => b.AfterPeriod == period.Number - 1);
+                      
+                            @if (breakBefore != null)
+                            {
+                                <tr class="tt-break-row">
+                                    <td class="tt-time-col" style="background:transparent; color:#b7791f;">
+                                        @breakBefore.Start–@breakBefore.End
+                                    </td>
+                                    <td colspan="5">
+                                        <i class="bi bi-cup-hot-fill me-1"></i>@breakBefore.Label — 15 minutes
+                                    </td>
+                                </tr>
+                            }
+
+                            <tr>
+                                <td class="tt-time-col">
+                                    <strong>@period.Label</strong><br />
+                                    <span style="font-size:.7rem;">@period.Start – @period.End</span>
+                                </td>
+                                @foreach (var (d, _) in days)
+                                {
+                                    var available = SchoolDay.IsPeriodAvailable(period.Number, d);
+                                    var key = $"{d}_{period.Number}";
+                                    if (available)
+                                    {
+                                        <td class="tt-cell"
+                                            data-day="@d"
+                                            data-period="@period.Number"
+                                            data-key="@key">
+                                        </td>
+                                    }
+                                    else
+                                    {
+                                        <td class="tt-cell unavailable" title="School ends at 14:30 on Friday">
+                                            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-size:.7rem;">
+                                                —
+                                            </div>
+                                        </td>
+                                    }
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="d-flex gap-3 mt-2 flex-wrap">
+                <span class="badge" style="background:#e8f0fe;color:#1a56db; font-weight:500;">
+                    <i class="bi bi-megaphone me-1"></i>Assembly (Mon & Fri)
+                </span>
+                <span class="badge" style="background:#fef9e7;color:#b7791f; font-weight:500;">
+                    <i class="bi bi-cup-hot me-1"></i>Breaks (×2, 15 min each)
+                </span>
+                <span class="badge" style="background:#f1f5f9;color:#94a3b8; font-weight:500;">
+                    — Not available (Fri ends 14:30)
+                </span>
+            </div>
+        </div>
+    </div>
+}

@@ -1,0 +1,247 @@
+﻿@{
+    ViewData["Title"] = "Event Scanner";
+    int schoolEventId = ViewBag.SchoolEventId;
+    string eventTitle = ViewBag.EventTitle;
+    string eventDate = ViewBag.EventDate;
+}
+
+<style>
+    :root {
+        --s-dark: #1e3a5f;
+        --s-green: #10b981;
+        --s-red: #ef4444;
+        --s-amber: #f59e0b;
+    }
+
+    .scanner-wrap {
+        max-width: 560px;
+        margin: 0 auto;
+    }
+
+    .scanner-header {
+        background: var(--s-dark);
+        color: #fff;
+        border-radius: 12px;
+        padding: 24px 28px;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+
+        .scanner-header h4 {
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .scanner-header p {
+            margin: 4px 0 0;
+            color: #93c5fd;
+            font-size: .85rem;
+        }
+
+    #reader {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 3px solid var(--s-dark);
+        background: #000;
+    }
+
+    .result-box {
+        border-radius: 10px;
+        padding: 20px 24px;
+        margin-top: 1rem;
+        display: none;
+        animation: slideIn .2s ease;
+    }
+
+    .result-valid {
+        background: #d1fae5;
+        border: 2px solid var(--s-green);
+    }
+
+    .result-used {
+        background: #fef3c7;
+        border: 2px solid var(--s-amber);
+    }
+
+    .result-invalid {
+        background: #fee2e2;
+        border: 2px solid var(--s-red);
+    }
+
+    .result-box h5 {
+        margin: 0 0 6px;
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    .result-box p {
+        margin: 0;
+        font-size: .85rem;
+    }
+
+    .scan-log {
+        margin-top: 1.5rem;
+    }
+
+    .scan-log-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 14px;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        font-size: .8rem;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+    }
+
+        .scan-log-item .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+    .manual-input {
+        margin-top: 1rem;
+    }
+
+    @@keyframes slideIn {
+        from
+
+    {
+        transform: translateY(-8px);
+        opacity: 0
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1
+    }
+
+    }
+</style>
+
+<div class="scanner-wrap">
+    <div class="scanner-header">
+        <h4>📷 Event Scanner</h4>
+        <p>@eventTitle &mdash; @eventDate</p>
+    </div>
+
+    <!-- QR Reader (html5-qrcode) -->
+    <div id="reader"></div>
+
+    <!-- Result box -->
+    <div class="result-box" id="resultBox">
+        <h5 id="resultMsg"></h5>
+        <p id="resultDetail"></p>
+    </div>
+
+    <!-- Manual hash input (fallback) -->
+    <div class="manual-input">
+        <div class="input-group">
+            <input type="text" id="manualHash" class="form-control"
+                   placeholder="Or paste ticket hash manually…" />
+            <button class="btn btn-outline-primary" onclick="processHash(document.getElementById('manualHash').value)">
+                Check
+            </button>
+        </div>
+    </div>
+
+    <!-- Scan log -->
+    <div class="scan-log">
+        <p class="small fw-semibold text-muted mb-2">Recent Scans</p>
+        <div id="scanLog"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script>
+        const SCHOOL_EVENT_ID = @schoolEventId;
+        const TOKEN           = '@Html.AntiForgeryToken()'.match(/value="([^"]+)"/)?.[1] || '';
+        let   lastHash        = '';
+        let   scanLock        = false;   // prevent double-scan
+
+        // ── Init scanner ─────────────────────────────────────────────────────────────
+        const html5QrCode = new Html5Qrcode("reader");
+
+        Html5Qrcode.getCameras().then(cameras => {
+            if (!cameras.length) { alert('No camera found.'); return; }
+            // Prefer rear camera
+            const cam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+            html5QrCode.start(
+                cam.id,
+                { fps:10, qrbox: { width:250, height:250 }, aspectRatio:1.0 },
+                onScanSuccess,
+                () => {}   // ignore errors (frame misses)
+            ).catch(err => console.error('Camera start failed:', err));
+        }).catch(() => alert('Camera access denied. Use manual input below.'));
+
+        // ── On successful QR decode ───────────────────────────────────────────────────
+        function onScanSuccess(decodedText) {
+            if (scanLock || decodedText === lastHash) return;
+            lastHash  = decodedText;
+            scanLock  = true;
+            setTimeout(() => { scanLock = false; }, 3000);   // 3s cooldown per scan
+            processHash(decodedText);
+        }
+
+        // ── Send hash to server ───────────────────────────────────────────────────────
+        async function processHash(hash) {
+            hash = hash.trim();
+            if (!hash) return;
+
+            const fd = new FormData();
+            fd.append('schoolEventId', SCHOOL_EVENT_ID);
+            fd.append('hash',          hash);
+            fd.append('deviceInfo',    navigator.userAgent.substring(0, 200));
+            fd.append('__RequestVerificationToken', TOKEN);
+
+            const res  = await fetch('@Url.Action("ProcessScan", "EventManagement")', { method:'POST', body:fd });
+            const data = await res.json();
+
+            showResult(data);
+            addLogEntry(data, hash);
+
+            document.getElementById('manualHash').value = '';
+        }
+
+        // ── Display result ────────────────────────────────────────────────────────────
+        function showResult(data) {
+            const box    = document.getElementById('resultBox');
+            const msg    = document.getElementById('resultMsg');
+            const detail = document.getElementById('resultDetail');
+
+            box.className = 'result-box result-' +
+                (data.result === 'Valid' ? 'valid' : data.result === 'AlreadyUsed' ? 'used' : 'invalid');
+            box.style.display = 'block';
+            msg.textContent   = data.message;
+            detail.textContent= data.ownerName
+                ? `${data.ticketType} ticket — ${data.ownerName}${data.issuedAt ? ' · Issued: ' + data.issuedAt : ''}`
+                : '';
+
+            // Auto-hide after 4s
+            clearTimeout(box._timer);
+            box._timer = setTimeout(() => { box.style.display = 'none'; }, 4000);
+        }
+
+        // ── Add to scan log ────────────────────────────────────────────────────────────
+        function addLogEntry(data, hash) {
+            const log  = document.getElementById('scanLog');
+            const dot  = data.result === 'Valid' ? '#10b981' :
+                         data.result === 'AlreadyUsed' ? '#f59e0b' : '#ef4444';
+            const row  = document.createElement('div');
+            row.className = 'scan-log-item';
+            row.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <div class="dot" style="background:${dot}"></div>
+                    <span>${data.ownerName || hash.substring(0,12)+'…'}</span>
+                </div>
+                <div class="text-muted">${new Date().toLocaleTimeString('en-ZA')} · ${data.result}</div>`;
+            log.prepend(row);
+            if (log.children.length > 20) log.lastChild.remove();
+        }
+    </script>
+}
+

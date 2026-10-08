@@ -1,0 +1,54 @@
+@model IList<Driver>
+@{ ViewData["Title"] = "Drivers"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-person-badge me-2"></i>Drivers</h2></div>
+    @if (User.IsInRole("Admin"))
+    {
+        <a asp-action="DriverEdit" class="btn btn-dhs-primary"><i class="bi bi-person-plus me-1"></i>Add New Driver</a>
+    }
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">No drivers on record yet.</div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Name</th><th>ID / Passport</th><th>Phone</th><th>License</th><th>Expiry</th><th>Status</th>@if (User.IsInRole("Admin")){<th></th>}</tr></thead>
+                <tbody>
+                @foreach (var d in Model)
+                {
+                    <tr>
+                        <td><strong>@d.FullName</strong></td>
+                        <td>@d.IdNumber</td>
+                        <td>@d.Phone</td>
+                        <td>@d.LicenseNumber</td>
+                        <td>
+                            @d.LicenseExpiryDate.ToString("dd MMM yyyy")
+                            @if (d.LicenseExpired)
+                            { <span class="badge badge-rejected rounded-pill ms-1">Expired</span> }
+                            else if (d.LicenseExpiringSoon)
+                            { <span class="badge badge-pending rounded-pill ms-1">Expiring Soon</span> }
+                        </td>
+                        <td>@(d.IsActive ? "Active" : "Inactive")</td>
+                        @if (User.IsInRole("Admin"))
+                        {
+                            <td class="d-flex gap-1">
+                                <a asp-action="DriverEdit" asp-route-id="@d.Id" class="btn btn-sm btn-dhs-primary"><i class="bi bi-pencil-square"></i></a>
+                                <form asp-action="DeactivateDriver" asp-route-id="@d.Id" method="post" onsubmit="return confirm('Deactivate this driver?');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i></button>
+                                </form>
+                            </td>
+                        }
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

@@ -1,0 +1,243 @@
+@model PreOrderWeekViewModel
+@{
+    ViewData["Title"] = "Meal Pre-Order";
+    var jsonOpts = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+    var types = new[] { "Breakfast", "Lunch", "Dinner" };
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+    var now = DlangezwaHS.Web.Services.SchoolClock.Now;
+    var slots = Model.Meals.GroupBy(m => (m.ServingDate, m.MealType)).ToList();
+    var orderedSlots = slots.Count(s => s.Any(o => o.CurrentOrderStatus is "Confirmed" or "WaitListed"));
+    var closingSoon = slots.Count(s => s.First().OrderDeadline <= now.AddHours(24) && !s.Any(o => o.CurrentOrderStatus is "Confirmed" or "WaitListed"));
+    var days = Model.Meals.GroupBy(m => m.ServingDate).OrderBy(g => g.Key).ToList();
+}
+
+<style>
+    .po-day-head { display: flex; align-items: center; gap: .8rem; margin-bottom: .8rem; }
+    .po-progress { width: 120px; }
+    .po-slot { height: 100%; border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); display: flex; flex-direction: column; overflow: hidden;
+        transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; }
+    .po-slot:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); border-color: var(--k-accent); }
+    .po-slot.breakfast { --k-accent: var(--k-breakfast); --k-soft: var(--k-breakfast-bg); --k-ink: var(--k-breakfast-fg); }
+    .po-slot.lunch { --k-accent: var(--k-lunch); --k-soft: var(--k-lunch-bg); --k-ink: var(--k-lunch-fg); }
+    .po-slot.dinner { --k-accent: var(--k-dinner); --k-soft: var(--k-dinner-bg); --k-ink: var(--k-dinner-fg); }
+    .po-slot.done { border-color: #86efac; }
+    .po-slot-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .8rem 1rem; background: var(--k-soft); color: var(--k-ink); }
+    .po-slot-head .title { font-weight: 800; display: flex; align-items: center; gap: .4rem; }
+    .po-slot-body { padding: .9rem; flex-grow: 1; }
+    .po-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .65rem; }
+
+    /* Meal tiles — the whole tile is the radio choice */
+    .po-tile { position: relative; display: flex; flex-direction: column; margin: 0; border-radius: 16px; overflow: hidden; background: #fff; border: 2px solid #e2e8f0; cursor: pointer;
+        transition: transform .3s var(--ease-spring), border-color .2s, box-shadow .25s; }
+    .po-tile:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -14px rgba(11,42,74,.45); }
+    .po-tile input { position: absolute; opacity: 0; pointer-events: none; }
+    .po-tile .photo { aspect-ratio: 4 / 3; background: var(--dhs-light); display: grid; place-items: center; color: #94a3b8; font-size: 2rem; overflow: hidden; }
+    .po-tile .photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease-spring); }
+    .po-tile:hover .photo img { transform: scale(1.07); }
+    .po-tile .info { padding: .55rem .65rem .65rem; }
+    .po-tile .name { font-weight: 700; color: var(--dhs-navy); font-size: .88rem; line-height: 1.25; }
+    .po-tile .more { font-size: .75rem; font-weight: 600; }
+    .po-tile .tick { position: absolute; top: .5rem; right: .5rem; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: transparent;
+        border: 2px solid #e2e8f0; transform: scale(.8); transition: all .3s cubic-bezier(.34,1.56,.64,1); }
+    .po-tile:has(input:checked) { border-color: var(--k-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-accent) 25%, transparent); }
+    .po-tile:has(input:checked) .tick { background: var(--k-accent); border-color: var(--k-accent); color: #fff; transform: scale(1); }
+    .po-tile:has(input:focus-visible) { outline: 3px solid var(--dhs-blue); outline-offset: 2px; }
+    .po-tile .badge-ordered { position: absolute; left: .5rem; top: .5rem; }
+
+    .po-foot { padding: .75rem .9rem; border-top: 1px solid #f1f5f9; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+    .po-sizes { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--dhs-light); gap: 2px; }
+    .po-sizes input { position: absolute; opacity: 0; pointer-events: none; }
+    .po-sizes span { display: block; padding: .3rem .65rem; border-radius: 9px; font-size: .78rem; font-weight: 700; color: var(--dhs-grey); cursor: pointer; transition: background .2s, color .2s; }
+    .po-sizes input:checked + span { background: #fff; color: var(--dhs-navy); box-shadow: 0 2px 6px rgba(11,42,74,.15); }
+    .po-sizes input:focus-visible + span { outline: 2px solid var(--dhs-blue); }
+    .po-deadline { font-size: .74rem; }
+    .po-deadline.soon { color: #b45309; font-weight: 700; }
+    #mealDetailImage { width: 100%; height: 230px; object-fit: cover; }
+    .po-ph { height: 180px; background: #f1f5f9; color: #94a3b8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; font-size: .85rem; }
+    .po-ph i { font-size: 2.4rem; }
+    @@media (prefers-reduced-motion: reduce) { .po-tile, .po-tile .photo img, .po-tile .tick, .po-slot { transition: none; } }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-basket me-2"></i>Meal Pre-Order</h2>
+        <p>@Model.LearnerName · pick <strong>one meal</strong> per serving time · ordering closes @DlangezwaHS.Web.Services.MealOrderService.OrderDeadlineHours hours before serving</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="MealPlan" class="k-btn k-btn-light"><i class="bi bi-calendar3"></i>Menu</a>
+        <a asp-action="LearnerOverview" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Back</a>
+    </div>
+</div>
+
+@if (!Model.Meals.Any())
+{
+    <div class="k-empty k-rise">
+        <i class="bi bi-basket"></i>
+        <strong>No meals are open for pre-ordering right now</strong>
+        @if (Model.ClosedCount > 0) { <p>@Model.ClosedCount meal(s) this week have already closed.</p> }
+    </div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-egg-fried"></i>Open meals</div><div class="k-stat-value" data-count="@slots.Count">@slots.Count</div><div class="k-stat-note">over @days.Count day(s)</div></div></div>
+        <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Ordered</div><div class="k-stat-value" data-count="@orderedSlots">@orderedSlots</div><div class="k-stat-note">meals chosen</div></div></div>
+        <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-hourglass-split"></i>Still to choose</div><div class="k-stat-value" data-count="@(slots.Count - orderedSlots)">@(slots.Count - orderedSlots)</div><div class="k-stat-note">no order yet</div></div></div>
+        <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat @(closingSoon > 0 ? "danger" : "lunch")"><div class="k-stat-label"><i class="bi bi-alarm"></i>Closing soon</div><div class="k-stat-value" data-count="@closingSoon">@closingSoon</div><div class="k-stat-note">unordered, within 24 hours</div></div></div>
+    </div>
+
+    @if (Model.HiddenForAllergy.Any())
+    {
+        <div class="k-card mb-4 k-rise" style="--i:4;border-color:#fde68a;background:#fffbeb">
+            <div class="d-flex gap-2"><i class="bi bi-shield-exclamation fs-5" style="color:#d97706"></i>
+                <div><strong style="color:#92400e">Hidden because of @Model.LearnerName's allergy profile</strong>
+                    <ul class="mb-0 mt-1 small" style="color:#92400e">@foreach (var h in Model.HiddenForAllergy) { <li>@h</li> }</ul></div></div>
+        </div>
+    }
+
+    <div id="dayList" data-more-list data-more-initial="3" data-more-step="3">
+        @foreach (var (day, di) in days.Select((d, i) => (d, i)))
+        {
+            var daySlots = day.GroupBy(m => m.MealType).OrderBy(g => Array.IndexOf(types, g.Key)).ToList();
+            var dayOrdered = daySlots.Count(s => s.Any(o => o.CurrentOrderStatus is "Confirmed" or "WaitListed"));
+            <section class="mb-4 k-rise" style="--i:@(Math.Min(di + 5, 10))" data-more-item>
+                <div class="po-day-head">
+                    <span class="k-date" aria-hidden="true"><span><b>@day.Key.Day</b>@day.Key.ToString("MMM")</span></span>
+                    <div class="flex-grow-1">
+                        <div class="k-acc-title">@day.First().DayLabel @if (day.Key == now.Date) { <span class="badge bg-primary ms-1">Today</span> }</div>
+                        <div class="k-sub">@dayOrdered of @daySlots.Count meal(s) chosen</div>
+                    </div>
+                    <div class="po-progress"><div class="k-meter"><span data-pct="@(daySlots.Count > 0 ? dayOrdered * 100 / daySlots.Count : 0)"></span></div></div>
+                </div>
+                <div class="row g-3">
+                    @foreach (var slot in daySlots)
+                    {
+                        var first = slot.First();
+                        var key = slot.Key.ToLowerInvariant();
+                        var ordered = slot.FirstOrDefault(o => o.CurrentOrderStatus is "Confirmed" or "WaitListed");
+                        var slotKey = $"slot-{first.MealPlanItemId}";
+                        var soon = first.OrderDeadline <= now.AddHours(24);
+                        <div class="col-lg-4">
+                            <div class="po-slot @key @(ordered is not null ? "done" : "")">
+                                <div class="po-slot-head">
+                                    <span class="title"><i class="bi @TypeIcon(slot.Key)"></i>@slot.Key <span class="fw-normal small">· @first.ServingTime</span></span>
+                                    @if (ordered?.CurrentOrderStatus == "Confirmed") { <span class="k-pill ok"><i class="bi bi-check2"></i>Ordered</span> }
+                                    else if (ordered?.CurrentOrderStatus == "WaitListed") { <span class="k-pill warn">Waitlisted</span> }
+                                </div>
+                                <div class="po-slot-body">
+                                    @* One form per serving time: a single radio choice, so only one meal can be picked *@
+                                    <form method="post" asp-action="PlaceMealOrder" id="@slotKey" data-busy>
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="learnerId" value="@Model.LearnerId" />
+                                        <div class="po-grid" role="radiogroup" aria-label="@slot.Key on @day.First().DayLabel">
+                                            @foreach (var m in slot)
+                                            {
+                                                var isOrdered = m == ordered;
+                                                var detail = System.Text.Json.JsonSerializer.Serialize(new
+                                                {
+                                                    name = m.MenuDescription, description = m.Description, imageUrl = m.ImageUrl,
+                                                    ingredients = m.IngredientNames, when = $"{m.DayLabel} {m.MealType} · {m.ServingTime}"
+                                                }, jsonOpts);
+                                                <label class="po-tile" for="opt-@m.MealPlanItemId">
+                                                    <input type="radio" name="mealPlanItemId" id="opt-@m.MealPlanItemId" value="@m.MealPlanItemId"
+                                                           checked="@(isOrdered || (ordered is null && slot.Count() == 1))" required />
+                                                    <span class="photo">
+                                                        @if (!string.IsNullOrEmpty(m.ImageUrl)) { <img src="@m.ImageUrl" alt="@m.MenuDescription" loading="lazy" /> }
+                                                        else { <i class="bi bi-egg-fried" aria-hidden="true"></i> }
+                                                    </span>
+                                                    <span class="tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                                                    @if (isOrdered)
+                                                    {
+                                                        <span class="badge-ordered k-pill @(m.CurrentOrderStatus == "Confirmed" ? "ok" : "warn")">@(m.CurrentOrderStatus == "Confirmed" ? m.CurrentPortionSize : "Waitlisted")@(m.OrderedByLearner && User.IsInRole("Parent") ? " · by learner" : "")</span>
+                                                    }
+                                                    <span class="info d-block">
+                                                        <span class="name d-block">@m.MenuDescription</span>
+                                                        <a href="#" class="more view-item" data-detail="@detail"><i class="bi bi-info-circle me-1"></i>View item</a>
+                                                    </span>
+                                                </label>
+                                            }
+                                        </div>
+                                    </form>
+                                </div>
+                                <div class="po-foot">
+                                    <div class="po-sizes" role="radiogroup" aria-label="Portion size">
+                                        @foreach (var size in new[] { "Small", "Regular", "Large" })
+                                        {
+                                            <label class="m-0"><input type="radio" name="portionSize" value="@size" form="@slotKey" checked="@(size == (ordered?.CurrentPortionSize ?? "Regular"))" /><span>@size</span></label>
+                                        }
+                                    </div>
+                                    <button type="submit" form="@slotKey" class="k-btn @(ordered is null ? "k-btn-primary" : "k-btn-ghost") k-btn-sm ms-auto" data-busy-text="Saving…">
+                                        <i class="bi @(ordered is null ? "bi-cart-plus" : "bi-arrow-repeat")"></i>@(ordered is null ? "Order" : "Update")
+                                    </button>
+                                    @if (ordered is not null)
+                                    {
+                                        <form method="post" asp-action="CancelMealOrder" class="m-0" data-busy>
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="learnerId" value="@Model.LearnerId" />
+                                            <input type="hidden" name="mealPlanItemId" value="@ordered.MealPlanItemId" />
+                                            <button type="submit" class="k-btn k-btn-danger k-btn-sm" title="Cancel order" data-busy-text="…"><i class="bi bi-x-lg"></i><span class="visually-hidden">Cancel order</span></button>
+                                        </form>
+                                    }
+                                    <div class="w-100 po-deadline @(soon && ordered is null ? "soon" : "k-sub")"><i class="bi bi-clock me-1"></i>Order by @first.OrderDeadline.ToString("ddd dd MMM HH:mm")@(soon && ordered is null ? " — closing soon" : "")</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+    </div>
+    <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="dayList"><i class="bi bi-chevron-down"></i>See <span data-more-count>3</span> more days</button></div>
+
+    @if (Model.ClosedCount > 0)
+    {
+        <p class="k-sub mt-3"><i class="bi bi-clock-history me-1"></i>@Model.ClosedCount meal(s) this week have passed their ordering deadline and are no longer shown.</p>
+    }
+}
+
+<!-- Meal detail pop-up -->
+<div class="modal fade k-modal" id="mealDetailModal" tabindex="-1" aria-labelledby="mealDetailName">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <img id="mealDetailImage" alt="" hidden />
+            <div id="mealDetailNoImage" class="po-ph"><i class="bi bi-image"></i><span>No photo for this meal yet</span></div>
+            <div class="k-modal-head">
+                <span class="k-bubble b1"></span><span class="k-bubble b3"></span>
+                <h5 id="mealDetailName"></h5>
+                <p id="mealDetailWhen"></p>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="k-label">About</div>
+                <p id="mealDetailDescription" class="mb-3"></p>
+                <div class="k-label">Ingredients</div>
+                <div id="mealDetailIngredients" class="d-flex flex-wrap gap-1"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.querySelectorAll('.view-item').forEach(link => link.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const d = JSON.parse(link.dataset.detail);
+        document.getElementById('mealDetailName').textContent = d.name;
+        document.getElementById('mealDetailWhen').textContent = d.when;
+        document.getElementById('mealDetailDescription').textContent = d.description || 'No description provided.';
+        const img = document.getElementById('mealDetailImage');
+        img.hidden = !d.imageUrl;
+        document.getElementById('mealDetailNoImage').hidden = !!d.imageUrl;
+        if (d.imageUrl) { img.src = d.imageUrl; img.alt = d.name; }
+        const list = document.getElementById('mealDetailIngredients');
+        list.innerHTML = '';
+        (d.ingredients.length ? d.ingredients : ['Not listed']).forEach(i => {
+            const s = document.createElement('span'); s.className = 'k-pill'; s.textContent = i; list.appendChild(s);
+        });
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('mealDetailModal')).show();
+    }));
+    // Meters for days revealed with "See more"
+    document.querySelector('[data-more-btn="dayList"]')?.addEventListener('click', () => window.kAnimateMeters());
+</script>
+}

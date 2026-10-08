@@ -1,0 +1,158 @@
+@model DietaryProfileSubmitViewModel
+@{ ViewData["Title"] = "Update Dietary Profile"; }
+
+<style>
+    .dp-item { position: relative; border-radius: 20px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1.1rem 1.2rem; margin-bottom: .9rem;
+        transition: transform .3s var(--ease-spring), box-shadow .3s var(--ease-spring), border-color .2s; animation: dp-in .45s var(--ease-spring); }
+    .dp-item:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    @@keyframes dp-in { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+    .dp-num { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dhs-grey); }
+    .dp-remove { position: absolute; right: .8rem; top: .8rem; width: 32px; height: 32px; border-radius: 10px; border: 0; background: transparent; color: #94a3b8; }
+    .dp-remove:hover { background: #fee2e2; color: #dc2626; }
+    .dp-choices { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .dp-choice input { position: absolute; opacity: 0; pointer-events: none; }
+    .dp-choice span { display: inline-flex; align-items: center; gap: .35rem; padding: .42rem .85rem; border-radius: 99px; border: 1.5px solid #e2e8f0; background: #fff;
+        font-size: .85rem; font-weight: 600; color: var(--dhs-navy); cursor: pointer; transition: all .2s; }
+    .dp-choice span:hover { border-color: var(--dhs-blue-dark); background: var(--dhs-light); }
+    .dp-choice input:checked + span { background: var(--dhs-navy); border-color: var(--dhs-navy); color: #fff; }
+    .dp-choice input:focus-visible + span { outline: 3px solid var(--dhs-blue); outline-offset: 2px; }
+    .dp-sev.mild input:checked + span { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    .dp-sev.severe input:checked + span { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+    .dp-sev.anaphylactic input:checked + span { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .dp-severity { transition: opacity .25s; }
+    .dp-severity[hidden] { display: none; }
+    .dp-drop { border: 2px dashed #cbd5e1; border-radius: 18px; padding: 1.4rem; text-align: center; background: #f8fafc; cursor: pointer; transition: border-color .2s, background .2s; }
+    .dp-drop:hover, .dp-drop.has-files { border-color: var(--dhs-blue-dark); background: var(--dhs-light); }
+    .dp-drop i { font-size: 2rem; color: var(--dhs-blue-dark); }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-clipboard2-plus me-2"></i>Update Dietary Profile</h2>
+        <p>@Model.LearnerName · the kitchen and housemaster see it as soon as you save, and it replaces the previous profile</p>
+    </div>
+    <a asp-action="DietaryProfile" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Back to profile</a>
+</div>
+
+<form asp-action="DietaryProfileCreate" method="post" enctype="multipart/form-data" id="profileForm" data-busy>
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="LearnerId" />
+    <input type="hidden" asp-for="LearnerName" />
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+    <div class="alert alert-danger small py-2" id="formError" hidden></div>
+
+    <div class="k-section mt-0">Allergies &amp; needs</div>
+    <div id="itemRows">
+        <div class="dp-item" data-item>
+            <button type="button" class="dp-remove" data-remove aria-label="Remove this item"><i class="bi bi-x-lg"></i></button>
+            <div class="dp-num mb-2" data-num>Item 1</div>
+            <div class="dp-choices mb-3" role="radiogroup" aria-label="Type">
+                <label class="dp-choice"><input type="radio" name="Items[0].Category" value="Allergy" checked /><span><i class="bi bi-shield-exclamation"></i>Allergy</span></label>
+                <label class="dp-choice"><input type="radio" name="Items[0].Category" value="DietaryRequirement" /><span><i class="bi bi-egg-fried"></i>Dietary requirement</span></label>
+                <label class="dp-choice"><input type="radio" name="Items[0].Category" value="MedicalRestriction" /><span><i class="bi bi-heart-pulse"></i>Medical</span></label>
+                <label class="dp-choice"><input type="radio" name="Items[0].Category" value="Preference" /><span><i class="bi bi-hand-thumbs-up"></i>Preference</span></label>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="k-label">What is it?</label>
+                    <input type="text" name="Items[0].Name" class="form-control k-input" placeholder="e.g. Peanuts, Halaal, Diabetic" maxlength="100" />
+                </div>
+                <div class="col-md-7 dp-severity" data-severity>
+                    <label class="k-label">How serious?</label>
+                    <div class="dp-choices" role="radiogroup" aria-label="Severity">
+                        <label class="dp-choice dp-sev mild"><input type="radio" name="Items[0].Severity" value="Mild" checked /><span>Mild</span></label>
+                        <label class="dp-choice dp-sev severe"><input type="radio" name="Items[0].Severity" value="Severe" /><span>Severe</span></label>
+                        <label class="dp-choice dp-sev anaphylactic"><input type="radio" name="Items[0].Severity" value="Anaphylactic" /><span><i class="bi bi-exclamation-octagon"></i>Anaphylactic</span></label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label class="k-label">Notes <span class="text-lowercase fw-normal">(optional)</span></label>
+                    <input type="text" name="Items[0].Notes" class="form-control k-input" placeholder="e.g. carries an EpiPen" maxlength="300" />
+                </div>
+            </div>
+        </div>
+    </div>
+    <button type="button" id="addItem" class="k-btn k-btn-ghost"><i class="bi bi-plus-lg"></i>Add another item</button>
+    <p class="k-sub mt-2">Severe and anaphylactic allergies stop meals that contain them from being pre-ordered.</p>
+
+    <div class="k-section">Supporting documents <span class="text-lowercase fw-normal">(optional)</span></div>
+    <label class="dp-drop d-block" for="documents" id="dropZone">
+        <i class="bi bi-cloud-arrow-up d-block mb-1"></i>
+        <strong style="color:var(--dhs-navy)">Add a doctor's letter or allergy test results</strong>
+        <div class="k-sub">Up to 5 files · PDF, JPG, PNG or WEBP · max 5 MB each · only you, the kitchen and the housemaster can open them</div>
+        <input type="file" id="documents" name="Documents" class="visually-hidden" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*" />
+    </label>
+    <ul id="docList" class="list-unstyled d-flex flex-wrap gap-2 mt-2 mb-0"></ul>
+
+    <div class="d-flex gap-2 mt-4">
+        <button type="submit" class="k-btn k-btn-primary px-4" data-busy-text="Saving…"><i class="bi bi-check2-circle"></i>Save Dietary Profile</button>
+        <a asp-action="DietaryProfile" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-ghost">Cancel</a>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+(function () {
+    const rows = document.getElementById('itemRows');
+    const template = rows.querySelector('[data-item]').cloneNode(true);
+
+    // Keep Items[0..n] contiguous so nothing after a removed row is lost on save
+    function reindex() {
+        rows.querySelectorAll('[data-item]').forEach((row, i) => {
+            row.querySelectorAll('[name]').forEach(el => el.name = el.name.replace(/Items\[\d+\]/, `Items[${i}]`));
+            row.querySelector('[data-num]').textContent = `Item ${i + 1}`;
+        });
+        const only = rows.querySelectorAll('[data-item]').length === 1;
+        rows.querySelectorAll('[data-remove]').forEach(b => b.hidden = only);
+    }
+    // Severity only applies to allergies
+    function syncSeverity(row) {
+        const allergy = row.querySelector('input[name$=".Category"]:checked').value === 'Allergy';
+        const box = row.querySelector('[data-severity]');
+        box.hidden = !allergy;
+        box.querySelectorAll('input').forEach(i => i.disabled = !allergy);
+    }
+
+    document.getElementById('addItem').addEventListener('click', () => {
+        const row = template.cloneNode(true);
+        row.querySelectorAll('input[type=text]').forEach(i => i.value = '');
+        rows.appendChild(row);
+        reindex(); syncSeverity(row);
+        row.querySelector('input[type=text]').focus();
+    });
+    rows.addEventListener('click', e => {
+        const btn = e.target.closest('[data-remove]');
+        if (!btn) return;
+        btn.closest('[data-item]').remove();
+        reindex();
+    });
+    rows.addEventListener('change', e => { if (e.target.name?.endsWith('.Category')) syncSeverity(e.target.closest('[data-item]')); });
+
+    document.getElementById('documents').addEventListener('change', function () {
+        const list = document.getElementById('docList');
+        list.innerHTML = '';
+        document.getElementById('dropZone').classList.toggle('has-files', this.files.length > 0);
+        Array.from(this.files).forEach(f => {
+            const tooBig = f.size > 5 * 1024 * 1024;
+            const li = document.createElement('li');
+            li.className = 'k-pill' + (tooBig ? ' danger' : '');
+            li.textContent = `${f.name} · ${Math.max(1, Math.round(f.size / 1024))} KB${tooBig ? ' — too large' : ''}`;
+            list.appendChild(li);
+        });
+        if (this.files.length > 5) list.insertAdjacentHTML('beforeend', '<li class="k-pill danger">Only 5 files can be attached</li>');
+    });
+
+    document.getElementById('profileForm').addEventListener('submit', e => {
+        reindex();
+        const named = Array.from(rows.querySelectorAll('input[name$=".Name"]')).filter(i => i.value.trim());
+        const err = document.getElementById('formError');
+        err.hidden = named.length > 0;
+        err.textContent = 'Add at least one allergy or need before saving.';
+        if (!named.length) { e.preventDefault(); rows.querySelector('input[type=text]').focus(); }
+    }, true);
+
+    reindex();
+    rows.querySelectorAll('[data-item]').forEach(syncSeverity);
+})();
+</script>
+}

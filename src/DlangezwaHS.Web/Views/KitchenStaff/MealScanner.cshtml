@@ -1,0 +1,236 @@
+@model int
+@{
+    ViewData["Title"] = "Meal Scanner";
+    var live = (MealAttendanceLiveViewModel)ViewBag.Live;
+    var key = live.MealType.ToLowerInvariant();
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+}
+
+<style>
+    .ms-reader-wrap { position: relative; border-radius: 22px; overflow: hidden; background: #0b1220; min-height: 280px; box-shadow: var(--shadow-ambient); }
+    #reader { min-height: 280px; }
+    #reader video { object-fit: cover; }
+    .ms-frame { position: absolute; inset: 14%; border-radius: 18px; pointer-events: none;
+        box-shadow: 0 0 0 9999px rgba(11,18,32,.35); border: 2px solid rgba(151,200,233,.85); }
+    .ms-line { position: absolute; left: 16%; right: 16%; height: 2px; top: 16%; pointer-events: none;
+        background: linear-gradient(90deg, transparent, var(--dhs-blue), transparent); box-shadow: 0 0 12px var(--dhs-blue); animation: ms-scan 2.4s ease-in-out infinite; }
+    @@keyframes ms-scan { 50% { top: 84%; } }
+    .ms-result { border-radius: 22px; padding: 1.4rem; border: 2px solid #e2e8f0; background: #fff; min-height: 280px; display: flex; flex-direction: column; justify-content: center;
+        box-shadow: var(--shadow-ambient); transition: border-color .3s, background .3s; }
+    .ms-result.ok { border-color: #10b981; background: #ecfdf5; }
+    .ms-result.warn { border-color: #f59e0b; background: #fffbeb; }
+    .ms-result.bad { border-color: #ef4444; background: #fef2f2; }
+    .ms-result.pop { animation: ms-pop .45s cubic-bezier(.34,1.56,.64,1); }
+    @@keyframes ms-pop { from { transform: scale(.94); } }
+    .ms-meal { font-size: 1.7rem; font-weight: 800; line-height: 1.15; color: var(--dhs-navy); }
+    .ms-result img { width: 96px; height: 96px; object-fit: cover; border-radius: 18px; }
+    .ms-state { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 1.4rem; color: #fff; }
+    .ms-result.ok .ms-state { background: #10b981; } .ms-result.warn .ms-state { background: #f59e0b; } .ms-result.bad .ms-state { background: #ef4444; }
+    .ms-bump { animation: ms-bump .5s cubic-bezier(.34,1.56,.64,1); }
+    @@keyframes ms-bump { 40% { transform: scale(1.25); } }
+    @@media (prefers-reduced-motion: reduce) { .ms-line, .ms-result.pop, .ms-bump { animation: none; } }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi @TypeIcon(live.MealType) me-2"></i>@live.DayLabel @live.MealType</h2>
+        <p>@live.MenuDescription</p>
+    </div>
+    <a asp-action="MealScanner" class="k-btn k-btn-light"><i class="bi bi-arrow-left-right"></i>Change meal</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat @key"><div class="k-stat-label"><i class="bi bi-basket"></i>Ordered</div><div class="k-stat-value" id="statExpected">@live.TotalExpected</div><div class="k-stat-note">confirmed pre-orders</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Served</div><div class="k-stat-value" id="statScanned">@live.ScannedCount</div><div class="k-stat-note">collected so far</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-hourglass-split"></i>Still to come</div><div class="k-stat-value" id="statWaiting">@live.NotYetArrived.Count</div><div class="k-stat-note">ordered, not scanned</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-flag"></i>No order</div><div class="k-stat-value" id="statFlagged">@live.FlaggedCount</div><div class="k-stat-note">flagged walk-ins</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6 k-rise" style="--i:4">
+        <div class="ms-reader-wrap">
+            <div id="reader"></div>
+            <div class="ms-frame" aria-hidden="true"></div>
+            <div class="ms-line" aria-hidden="true"></div>
+        </div>
+        <div class="input-group mt-2">
+            <input type="text" id="manualHash" class="form-control k-input" style="border-radius:12px 0 0 12px !important" placeholder="Or type / paste the badge code…" aria-label="Badge code" />
+            <button class="k-btn k-btn-primary" style="border-radius:0 12px 12px 0" id="manualCheck">Check</button>
+        </div>
+    </div>
+    <div class="col-md-6 k-rise" style="--i:5">
+        <div class="ms-result" id="orderCard" aria-live="polite">
+            <div class="text-center" id="orderIdle">
+                <i class="bi bi-person-badge d-block mb-2" style="font-size:2.6rem;color:var(--dhs-blue-dark)"></i>
+                <div class="fw-bold" style="color:var(--dhs-navy)">Ready to scan</div>
+                <div class="k-sub">Hold a learner's badge up to the camera to see what they ordered.</div>
+            </div>
+            <div id="orderResult" hidden>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="ms-state" id="resState"><i class="bi bi-check-lg"></i></span>
+                    <div><div class="fw-bold" style="color:var(--dhs-navy)" id="resLearner"></div><div class="k-sub" id="resMessage"></div></div>
+                </div>
+                <div class="d-flex gap-3 align-items-center my-2">
+                    <img id="resImage" alt="" hidden />
+                    <div>
+                        <div class="ms-meal" id="resMeal"></div>
+                        <div class="fw-semibold" id="resPortion"></div>
+                    </div>
+                </div>
+                <div class="k-pill danger mt-2" id="resAllergies" hidden></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-6 k-rise" style="--i:6">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Options for this meal</h3><p class="k-sub">Ordered vs served, live</p></div></div>
+            <table class="k-table">
+                <thead><tr><th>Option</th><th style="min-width:130px">Served</th></tr></thead>
+                <tbody>
+                @foreach (var o in live.Options)
+                {
+                    var pct = o.Ordered > 0 ? o.Served * 100.0 / o.Ordered : 0;
+                    <tr data-option="@o.MealPlanItemId">
+                        <td class="fw-semibold">@o.MenuDescription</td>
+                        <td>
+                            <div class="d-flex justify-content-between k-sub mb-1"><span><strong data-served>@o.Served</strong> of <span data-ordered>@o.Ordered</span></span></div>
+                            <div class="k-meter"><span data-pct="@pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"></span></div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-6 k-rise" style="--i:7">
+        <div class="k-card h-100">
+            <div class="k-card-head"><div><h3 class="k-title">Still to come</h3><p class="k-sub"><span id="waitingCount">@live.NotYetArrived.Count</span> learner(s) ordered but haven't been scanned</p></div></div>
+            <div class="d-flex flex-wrap gap-1" id="waitingList">
+                @foreach (var n in live.NotYetArrived) { <span class="k-pill">@n</span> }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="k-card mt-3 k-rise" style="--i:8">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h3 class="k-title">Close collection</h3>
+            <p class="k-sub mb-0">Learners who ordered but didn't collect are marked absent. The servings prepared are deducted from stock by recipe and the uncollected ones are recorded as leftovers.</p>
+        </div>
+        @if (live.IsFinalised)
+        {
+            <span class="k-pill ok"><i class="bi bi-check2-circle"></i>Collection closed</span>
+        }
+        else
+        {
+            <button type="button" class="k-btn k-btn-primary" id="finaliseBtn"><i class="bi bi-check2-circle"></i>Close Collection</button>
+        }
+    </div>
+    <form method="post" asp-action="FinalizeAttendance" class="mt-3 p-3 d-flex gap-2 align-items-center flex-wrap" id="finaliseConfirm" hidden data-busy
+          style="border-radius:16px;background:#fff7ed">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="mealPlanItemId" value="@Model" />
+        <span class="small">Close now? <strong id="confirmWaiting">@live.NotYetArrived.Count</strong> learner(s) will be marked absent.</span>
+        <button type="submit" class="k-btn k-btn-danger k-btn-sm" data-busy-text="Closing…">Yes, close collection</button>
+        <button type="button" class="k-btn k-btn-ghost k-btn-sm" id="finaliseCancel">Keep scanning</button>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script>
+        const MEAL_PLAN_ITEM_ID = @Model;
+        const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        let lastHash = '', scanLock = false;
+
+        if (typeof Html5Qrcode !== 'undefined') {
+            const html5QrCode = new Html5Qrcode("reader");
+            Html5Qrcode.getCameras().then(cameras => {
+                if (!cameras.length) return;
+                const cam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+                html5QrCode.start(cam.id, { fps: 10, qrbox: { width: 220, height: 220 } }, onScanSuccess, () => {}).catch(() => {});
+            }).catch(() => {});
+        }
+
+        function onScanSuccess(decodedText) {
+            if (scanLock || decodedText === lastHash) return;
+            lastHash = decodedText; scanLock = true;
+            setTimeout(() => { scanLock = false; lastHash = ''; }, 3000);
+            processHash(decodedText);
+        }
+
+        document.getElementById('manualCheck').addEventListener('click', () => processHash(document.getElementById('manualHash').value));
+        document.getElementById('manualHash').addEventListener('keydown', e => { if (e.key === 'Enter') processHash(e.target.value); });
+
+        async function processHash(hash) {
+            hash = (hash || '').trim();
+            if (!hash) return;
+            const fd = new FormData();
+            fd.append('mealPlanItemId', MEAL_PLAN_ITEM_ID);
+            fd.append('hash', hash);
+            fd.append('__RequestVerificationToken', TOKEN);
+            const res = await fetch('@Url.Action("RecordMealScan", "KitchenStaff")', { method: 'POST', body: fd });
+            showResult(await res.json());
+            document.getElementById('manualHash').value = '';
+            refreshLive();
+        }
+
+        function showResult(d) {
+            const card = document.getElementById('orderCard');
+            document.getElementById('orderIdle').hidden = true;
+            document.getElementById('orderResult').hidden = false;
+            const state = !d.learnerName ? 'bad' : (d.hasOrder && d.success ? 'ok' : (d.hasOrder ? 'warn' : 'bad'));
+            card.className = 'ms-result ' + state;
+            void card.offsetWidth; card.classList.add('pop');
+            document.getElementById('resState').innerHTML = `<i class="bi ${state === 'ok' ? 'bi-check-lg' : state === 'warn' ? 'bi-exclamation-lg' : 'bi-x-lg'}"></i>`;
+            document.getElementById('resLearner').textContent = d.learnerName || 'Unknown badge';
+            document.getElementById('resMeal').textContent = d.hasOrder ? d.orderedMeal : (d.learnerName ? 'No pre-order' : 'Scan rejected');
+            document.getElementById('resPortion').textContent = d.hasOrder && d.portionSize ? d.portionSize + ' portion' : '';
+            document.getElementById('resMessage').textContent = d.message;
+            const img = document.getElementById('resImage');
+            img.hidden = !d.imageUrl;
+            if (d.imageUrl) img.src = d.imageUrl;
+            const allergies = document.getElementById('resAllergies');
+            allergies.hidden = !(d.allergies && d.allergies.length);
+            allergies.textContent = d.allergies && d.allergies.length ? '⚠ Allergies: ' + d.allergies.join(', ') : '';
+        }
+
+        function setStat(id, value) {
+            const el = document.getElementById(id);
+            if (el.textContent === String(value)) return;
+            el.textContent = value;
+            el.classList.remove('ms-bump'); void el.offsetWidth; el.classList.add('ms-bump');
+        }
+
+        async function refreshLive() {
+            const res = await fetch('@Url.Action("MealScannerLive", "KitchenStaff")?mealPlanItemId=' + MEAL_PLAN_ITEM_ID);
+            const l = await res.json();
+            setStat('statExpected', l.totalExpected);
+            setStat('statScanned', l.scannedCount);
+            setStat('statWaiting', l.notYetArrived.length);
+            setStat('statFlagged', l.flaggedCount);
+            document.getElementById('waitingCount').textContent = l.notYetArrived.length;
+            document.getElementById('confirmWaiting').textContent = l.notYetArrived.length;
+            const list = document.getElementById('waitingList');
+            list.innerHTML = '';
+            l.notYetArrived.forEach(n => { const s = document.createElement('span'); s.className = 'k-pill'; s.textContent = n; list.appendChild(s); });
+            l.options.forEach(o => {
+                const row = document.querySelector(`[data-option="${o.mealPlanItemId}"]`);
+                if (!row) return;
+                row.querySelector('[data-ordered]').textContent = o.ordered;
+                row.querySelector('[data-served]').textContent = o.served;
+                row.querySelector('.k-meter span').style.width = (o.ordered ? Math.min(100, o.served / o.ordered * 100) : 0) + '%';
+            });
+        }
+
+        const finaliseBtn = document.getElementById('finaliseBtn');
+        if (finaliseBtn) {
+            finaliseBtn.addEventListener('click', () => { document.getElementById('finaliseConfirm').hidden = false; finaliseBtn.hidden = true; });
+            document.getElementById('finaliseCancel').addEventListener('click', () => { document.getElementById('finaliseConfirm').hidden = true; finaliseBtn.hidden = false; });
+        }
+    </script>
+}

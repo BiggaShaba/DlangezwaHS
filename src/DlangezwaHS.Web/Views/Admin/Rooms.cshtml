@@ -1,0 +1,82 @@
+@model List<Room>
+@{ ViewData["Title"] = "Rooms & Beds"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-building me-2"></i>Rooms &amp; Beds</h2><p>Boarding accommodation management</p></div>
+    <a asp-action="AddRoom" class="btn btn-dhs-secondary"><i class="bi bi-plus-circle me-1"></i> Add Room</a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="card"><div class="card-body text-center py-5 text-muted">
+        <i class="bi bi-building fs-1 d-block mb-3" style="color:#97C8E9;"></i>
+        <h5>No rooms configured yet</h5>
+        <a asp-action="AddRoom" class="btn btn-dhs-primary mt-2">Add First Room</a>
+    </div></div>
+}
+else
+{
+    <div class="row g-4">
+    @foreach (var room in Model)
+    {
+        var available = room.Beds.Count(b => b.Status == BedStatus.Available);
+        var occupied  = room.Beds.Count(b => b.Status == BedStatus.Occupied);
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-door-closed me-2"></i>@room.Name</h5>
+                    <span class="badge" style="background:#d1fae5;color:#065f46;">@available avail.</span>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-3 mb-3 text-center">
+                        <div class="flex-fill border rounded p-2">
+                            <div class="fw-bold fs-4" style="color:#0B2A4A;">@room.Beds.Count</div>
+                            <div class="small text-muted">Total</div>
+                        </div>
+                        <div class="flex-fill border rounded p-2">
+                            <div class="fw-bold fs-4 text-success">@available</div>
+                            <div class="small text-muted">Available</div>
+                        </div>
+                        <div class="flex-fill border rounded p-2">
+                            <div class="fw-bold fs-4 text-danger">@occupied</div>
+                            <div class="small text-muted">Occupied</div>
+                        </div>
+                    </div>
+
+                    @if (room.Beds.Any())
+                    {
+                        <div class="d-flex flex-wrap gap-1 mb-3">
+                        @foreach (var bed in room.Beds)
+                        {
+                            <span class="badge rounded-pill @(bed.Status == BedStatus.Available ? "badge-available" : bed.Status == BedStatus.Occupied ? "badge-occupied" : "badge-maintenance")"
+                                  title="@bed.Status">
+                                @bed.BedNumber
+                            </span>
+                        }
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(room.Notes))
+                    {
+                        <p class="text-muted small mb-3">@room.Notes</p>
+                    }
+
+                    <div class="d-flex gap-2">
+                        <a asp-action="AddBed" asp-route-roomId="@room.Id" class="btn btn-sm btn-dhs-secondary flex-fill">
+                            <i class="bi bi-plus"></i> Add Bed
+                        </a>
+                        <form asp-action="DeleteRoom" method="post" class="mb-0">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@room.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                    data-confirm="Delete room '@room.Name'? This cannot be undone.">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    </div>
+}

@@ -1,0 +1,211 @@
+﻿@model IList<QuestionPaper>
+@{
+    ViewData["Title"] = "Question Papers";
+    var subjects = ViewBag.Subjects as IEnumerable<Subject> ?? Enumerable.Empty<Subject>();
+    var grades = ViewBag.Grades as IEnumerable<Grade> ?? Enumerable.Empty<Grade>();
+    var terms = ViewBag.Terms as IEnumerable<string> ?? Enumerable.Empty<string>();
+    bool isTeacher = User.IsInRole("Teacher");
+    bool isAdmin = User.IsInRole("Admin");
+
+    // Group papers by Subject then Grade for categorised display
+    var grouped = Model
+        .GroupBy(p => p.Subject?.Name ?? "Other")
+        .OrderBy(g => g.Key);
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-journals me-2 text-primary"></i>Question Papers</h2>
+        <small class="text-muted">
+            @if (isAdmin)
+            {
+                <span>All papers — Admin view</span>
+            }
+            else
+            {
+
+                <span>Released question papers, categorised by subject and grade</span>
+            }
+        </small>
+    </div>
+    @if (isTeacher)
+    {
+        <a asp-action="Upload" class="btn btn-primary">
+            <i class="bi bi-cloud-upload me-2"></i>Upload Paper
+        </a>
+    }
+    @if (isAdmin)
+    {
+        <a asp-controller="Admin" asp-action="QuestionPapers" class="btn btn-outline-secondary">
+            <i class="bi bi-gear me-2"></i>Manage Papers
+        </a>
+    }
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" asp-action="Index" class="row g-2 align-items-end">
+            <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Subject</label>
+                <select name="subjectId" class="form-select form-select-sm">
+                    <option value="">All Subjects</option>
+                    @foreach (var s in subjects)
+                    {
+                        <option value="@s.Id" selected="@(ViewBag.SelSubject?.ToString() == s.Id.ToString())">@s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Grade</label>
+                <select name="gradeId" class="form-select form-select-sm">
+                    <option value="">All Grades</option>
+                    @foreach (var g in grades)
+                    {
+                        <option value="@g.Id" selected="@(ViewBag.SelGrade?.ToString() == g.Id.ToString())">@g.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Term</label>
+                <select name="term" class="form-select form-select-sm">
+                    <option value="">All Terms</option>
+                    @foreach (var t in terms)
+                    {
+                        <option value="@t" selected="@(ViewBag.SelTerm == t)">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-funnel me-1"></i>Filter
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="text-center py-5">
+        <i class="bi bi-journal-x fs-1 text-muted d-block mb-3"></i>
+        <h5 class="text-muted">No question papers found</h5>
+        <p class="text-muted small">
+            @if (isTeacher)
+            {
+                <span>Be the first to <a asp-action="Upload">upload a paper</a>.</span>
+            }
+            else
+            {
+
+                <span>Check back after your teacher uploads and the Admin releases a paper.</span>
+            }
+        </p>
+    </div>
+}
+else
+{
+    @foreach (var subjectGroup in grouped)
+    {
+        <!-- Subject accordion -->
+        var safeId = subjectGroup.Key.Replace(" ", "_").Replace("/", "_");
+        <div class="card mb-3">
+            <div class="card-header" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#sub_@safeId">
+                <div class="d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0"><i class="bi bi-book me-2"></i>@subjectGroup.Key</h6>
+                    <span class="badge bg-primary rounded-pill">@subjectGroup.Count() paper(s)</span>
+                </div>
+            </div>
+            <div id="sub_@safeId" class="collapse show">
+                <div class="card-body p-0">
+                    @foreach (var gradeGroup in subjectGroup.GroupBy(p => p.Grade?.Name ?? "Unknown").OrderBy(g => g.Key))
+                    {
+                        <div class="px-3 pt-3 pb-1">
+                            <span class="badge bg-secondary mb-2"><i class="bi bi-mortarboard me-1"></i>@gradeGroup.Key</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Title</th>
+                                        <th>Term</th>
+                                        <th>Year</th>
+                                        <th>Type</th>
+                                        <th>Uploaded By</th>
+                                        @if (isAdmin)
+                                        {
+                                            <th>Status</th>
+                                        }
+                                        <th>Released</th>
+                                        <th class="text-end pe-3">Download</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var paper in gradeGroup.OrderByDescending(p => p.AcademicYear).ThenBy(p => p.Term))
+                                    {
+                                        <tr>
+                                            <td class="ps-3 fw-semibold">@paper.Title</td>
+                                            <td>@paper.Term</td>
+                                            <td>@paper.AcademicYear</td>
+                                            <td><span class="badge bg-light text-dark border">@paper.PaperType</span></td>
+                                            <td>@(paper.UploadedByTeacher?.FullName ?? "—")</td>
+                                            @if (isAdmin)
+                                            {
+                                                <td>
+                                                    @switch (paper.Status)
+                                                    {
+                                                        case QuestionPaperStatus.Pending:
+                                                            <span class="badge bg-warning text-dark">Pending</span>
+                                                            break;
+                                                        case QuestionPaperStatus.Approved:
+                                                            <span class="badge bg-success">Approved</span>
+                                                            break;
+                                                        case QuestionPaperStatus.Released:
+                                                            <span class="badge bg-info">Released</span>
+                                                            break;
+                                                        case QuestionPaperStatus.Rejected:
+                                                            <span class="badge bg-danger">Rejected</span>
+                                                            break;
+                                                    }
+                                                </td>
+                                            }
+                                            <td class="text-muted small">
+                                                @(paper.ReleasedAt.HasValue? paper.ReleasedAt.Value.ToLocalTime().ToString("dd MMM yyyy") : "—")
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                @if (paper.IsReleased || isAdmin)
+                                                {
+                                                    <a asp-controller="QuestionPapers" asp-action="Download"
+                                                       asp-route-id="@paper.Id"
+                                                       class="btn btn-sm btn-outline-primary"
+                                                       title="Download @paper.OriginalFileName">
+                                                        <i class="bi bi-download me-1"></i>
+                                                        @((paper.OriginalFileName != null && paper.OriginalFileName.Contains("."))
+                                                                                            ? paper.OriginalFileName.Split('.').Last().ToUpper()
+                                                                                            : "")
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-light text-muted border">Not yet released</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}

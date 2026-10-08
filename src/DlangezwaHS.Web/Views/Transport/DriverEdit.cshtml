@@ -1,0 +1,77 @@
+@model DriverEditViewModel
+@{ ViewData["Title"] = Model.Id.HasValue ? "Edit Driver" : "Add New Driver"; }
+
+<div class="row justify-content-center">
+<div class="col-md-8">
+<div class="page-header"><h2><i class="bi bi-person-badge me-2"></i>@ViewData["Title"]</h2></div>
+<div class="card">
+    <div class="card-body p-4">
+        <form asp-action="DriverEdit" method="post" enctype="multipart/form-data">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="Id" />
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="FullName" class="form-label">Full Name <span class="text-danger">*</span></label>
+                    <input asp-for="FullName" class="form-control" />
+                    <span asp-validation-for="FullName" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="IdNumber" class="form-label">ID / Passport Number <span class="text-danger">*</span></label>
+                    <input asp-for="IdNumber" class="form-control" />
+                    <span asp-validation-for="IdNumber" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Phone" class="form-label">Phone Number</label>
+                    <input asp-for="Phone" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Email" class="form-label">Email Address</label>
+                    <input asp-for="Email" class="form-control" />
+                </div>
+                <div class="col-12">
+                    <label asp-for="Address" class="form-label">Home Address</label>
+                    <textarea asp-for="Address" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="LicenseNumber" class="form-label">Driver's License Number <span class="text-danger">*</span></label>
+                    <input asp-for="LicenseNumber" class="form-control" />
+                    <span asp-validation-for="LicenseNumber" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="LicenseExpiryDate" class="form-label">License Expiry Date <span class="text-danger">*</span></label>
+                    <input asp-for="LicenseExpiryDate" type="date" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="EmploymentDate" class="form-label">Date of Employment <span class="text-danger">*</span></label>
+                    <input asp-for="EmploymentDate" type="date" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="ShiftHours" class="form-label">Shift / Working Hours</label>
+                    <input asp-for="ShiftHours" class="form-control" placeholder="e.g. 06:00 - 15:00" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Photo" class="form-label">Photo</label>
+                    <input asp-for="Photo" type="file" class="form-control" accept=".jpg,.jpeg,.png" />
+                    @if (!string.IsNullOrEmpty(Model.ExistingPhotoPath))
+                    { <div class="form-text">Current file on record.</div> }
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="LicenseDoc" class="form-label">Scanned License Document</label>
+                    <input asp-for="LicenseDoc" type="file" class="form-control" accept=".pdf,.jpg,.jpeg,.png" />
+                    @if (!string.IsNullOrEmpty(Model.ExistingLicenseDocPath))
+                    { <div class="form-text">Current file on record.</div> }
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-dhs-primary px-4"><i class="bi bi-check me-1"></i>Save Driver</button>
+                <a asp-action="Drivers" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

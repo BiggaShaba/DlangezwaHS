@@ -1,0 +1,138 @@
+@model IList<PreOrderSummaryRow>
+@{
+    ViewData["Title"] = "Pre-Orders";
+    var plans = ViewBag.MealPlans as List<MealPlan> ?? new();
+    int mealPlanId = ViewBag.MealPlanId;
+    var today = (DateTime)ViewBag.Today;
+    var plan = plans.FirstOrDefault(p => p.Id == mealPlanId);
+    var thisMonday = DlangezwaHS.Web.Services.SchoolClock.WeekStart(today);
+
+    string Relation(DateTime monday) =>
+        monday.Date == thisMonday ? "This week" : monday.Date == thisMonday.AddDays(7) ? "Next week"
+        : monday.Date < thisMonday ? "Past" : "Upcoming";
+
+    // Only days that have orders are listed
+    var days = Model.GroupBy(r => r.Date).OrderBy(g => g.Key)
+        .Where(g => g.Sum(r => r.ConfirmedCount + r.WaitListedCount) > 0).ToList();
+    var types = new[] { "Breakfast", "Lunch", "Dinner" };
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+    var totalConfirmed = Model.Sum(r => r.ConfirmedCount);
+    var totalWaiting = Model.Sum(r => r.WaitListedCount);
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-basket me-2"></i>Meal Pre-Orders</h2>
+        <p>Portions to prepare for each meal, grouped by day</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        @if (plans.Any())
+        {
+            <form method="get" class="m-0">
+                <label for="weekSelect" class="visually-hidden">Week</label>
+                <select id="weekSelect" name="mealPlanId" class="form-select k-select" onchange="this.form.submit()">
+                    @foreach (var p in plans)
+                    {
+                        <option value="@p.Id" selected="@(p.Id == mealPlanId)">@Relation(p.WeekStartDate) · @p.WeekStartDate.ToString("dd MMM") – @p.WeekStartDate.AddDays(6).ToString("dd MMM yyyy")</option>
+                    }
+                </select>
+            </form>
+        }
+        @if (mealPlanId != 0)
+        {
+            <form method="post" asp-action="FinalizePreOrders" class="m-0" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="mealPlanId" value="@mealPlanId" />
+                <button type="submit" class="k-btn k-btn-accent" data-busy-text="Finalising…"><i class="bi bi-check2-circle"></i>Finalise &amp; Requisition</button>
+            </form>
+        }
+    </div>
+</div>
+
+@if (plan is null)
+{
+    <div class="k-empty"><i class="bi bi-calendar-x"></i><strong>No published meal plans yet</strong><p>Pre-orders open once a week's menu is published.</p></div>
+}
+else
+{
+    @* Totals per serving time for the week *@
+    <div class="row g-3 mb-1">
+        @foreach (var (t, i) in types.Select((t, i) => (t, i)))
+        {
+            var rows = Model.Where(r => r.MealType == t).ToList();
+            var confirmed = rows.Sum(r => r.ConfirmedCount);
+            var waiting = rows.Sum(r => r.WaitListedCount);
+            <div class="col-6 col-lg-3 k-rise" style="--i:@i">
+                <div class="k-stat @t.ToLowerInvariant()">
+                    <div class="k-stat-label"><i class="bi @TypeIcon(t)"></i>@t</div>
+                    <div class="k-stat-value" data-count="@confirmed">@confirmed</div>
+                    <div class="k-stat-note">confirmed@(waiting > 0 ? $" · {waiting} waiting" : "") · @rows.Select(r => r.Date).Distinct().Count() day(s)</div>
+                </div>
+            </div>
+        }
+        <div class="col-6 col-lg-3 k-rise" style="--i:3">
+            <div class="k-stat">
+                <div class="k-stat-label"><i class="bi bi-basket"></i>Whole week</div>
+                <div class="k-stat-value" data-count="@totalConfirmed">@totalConfirmed</div>
+                <div class="k-stat-note">confirmed orders@(totalWaiting > 0 ? $" · {totalWaiting} on waiting list" : "")</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="k-section k-rise" style="--i:4">Week of @plan.WeekStartDate.ToString("dd MMM yyyy") · by day</div>
+
+    @if (!days.Any())
+    {
+        <div class="k-empty k-rise" style="--i:5"><i class="bi bi-basket"></i><strong>No pre-orders for this week yet</strong><p>Days appear here as parents and learners order.</p></div>
+    }
+    @for (var d = 0; d < days.Count; d++)
+    {
+        var day = days[d];
+        var isToday = day.Key == today;
+        var isPast = day.Key < today;
+        var bodyId = $"day-{day.Key:yyyyMMdd}";
+        var dayConfirmed = day.Sum(r => r.ConfirmedCount);
+        var dayWaiting = day.Sum(r => r.WaitListedCount);
+        var open = isToday || (d == 0 && !days.Any(x => x.Key == today));
+        <div class="k-acc k-rise @(isToday ? "is-today" : "") @(isPast ? "is-past" : "")" style="--i:@(d + 5)">
+            <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@bodyId" aria-expanded="@(open ? "true" : "false")" aria-controls="@bodyId">
+                <span class="k-date" aria-hidden="true"><span><b>@day.Key.Day</b>@day.Key.ToString("MMM")</span></span>
+                <span class="flex-grow-1">
+                    <span class="k-acc-title d-block">@day.Key.ToString("dddd") @if (isToday) { <span class="badge bg-primary ms-1">Today</span> }</span>
+                    <span class="k-acc-meta">
+                        @foreach (var t in types)
+                        {
+                            var n = day.Where(r => r.MealType == t).Sum(r => r.ConfirmedCount);
+                            if (n > 0) { <span class="k-meal @t.ToLowerInvariant()"><i class="bi @TypeIcon(t)"></i>@n</span> }
+                        }
+                    </span>
+                </span>
+                <span class="text-end me-1">
+                    <span class="d-block fw-bold" style="color:var(--dhs-navy);font-size:1.15rem;">@dayConfirmed</span>
+                    <span class="k-sub">confirmed@(dayWaiting > 0 ? $" · {dayWaiting} waiting" : "")</span>
+                </span>
+                <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="collapse @(open ? "show" : "")" id="@bodyId">
+                <div class="k-acc-body">
+                    <div class="k-table-wrap">
+                        <table class="k-table">
+                            <thead><tr><th>Meal</th><th>Menu</th><th class="k-num">Confirmed</th><th class="k-num">Waiting list</th></tr></thead>
+                            <tbody>
+                            @foreach (var r in day.Where(r => r.ConfirmedCount + r.WaitListedCount > 0).OrderBy(r => Array.IndexOf(types, r.MealType)).ThenByDescending(r => r.ConfirmedCount))
+                            {
+                                <tr>
+                                    <td><span class="k-meal @r.MealType.ToLowerInvariant()"><i class="bi @TypeIcon(r.MealType)"></i>@r.MealType</span>@if (!string.IsNullOrEmpty(r.ServingTime)) { <span class="k-sub d-inline ms-1">@r.ServingTime</span> }</td>
+                                    <td class="fw-semibold">@r.MenuDescription</td>
+                                    <td class="k-num fw-bold">@r.ConfirmedCount</td>
+                                    <td class="k-num">@(r.WaitListedCount > 0 ? r.WaitListedCount.ToString() : "—")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}

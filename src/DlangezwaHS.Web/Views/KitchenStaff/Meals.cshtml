@@ -1,0 +1,357 @@
+@model MealLibraryViewModel
+@{
+    ViewData["Title"] = "Meal Library";
+    var jsonOpts = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+    var activeCount = Model.Meals.Count(m => m.IsActive);
+    var hiddenCount = Model.Meals.Count - activeCount;
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+}
+
+<style>
+    /* ── Header (same look as Meal Plans / Plan a Week) ── */
+    .ml-header { background: linear-gradient(120deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 55%, var(--dhs-blue-dark) 100%); }
+    .ml-header::after { content: ""; position: absolute; width: 340px; height: 340px; right: -90px; top: -180px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(151,200,233,.45), transparent 70%); pointer-events: none; animation: ml-glow 10s ease-in-out infinite; }
+    @@keyframes ml-glow { 50% { transform: translate(-30px, 20px) scale(1.1); } }
+    .ml-header > * { position: relative; z-index: 1; }
+    .ml-header h2 { font-size: 1.75rem; font-weight: 700; }
+    .ml-header p { font-size: .92rem; }
+
+    /* ── Buttons: hover lift + a moving gradient when pressed ── */
+    .ml-btn { position: relative; overflow: hidden; border-radius: 12px; font-weight: 600; padding: .55rem 1.15rem;
+        transition: transform .25s var(--ease-spring), box-shadow .25s var(--ease-spring), background-color .2s, color .2s, border-color .2s; }
+    .ml-btn:hover { transform: translateY(-2px); }
+    .ml-btn:active { transform: translateY(0) scale(.96); }
+    .ml-btn:focus-visible { outline: 3px solid var(--dhs-blue); outline-offset: 2px; }
+    .ml-btn.is-pressed, .ml-btn.is-busy { color: #fff !important; border-color: transparent !important;
+        background-image: linear-gradient(110deg, var(--dhs-navy), var(--dhs-blue-dark), var(--dhs-blue), var(--dhs-navy-mid), var(--dhs-navy)) !important;
+        background-size: 300% 100% !important; animation: ml-flow .9s linear; }
+    .ml-btn.is-busy { animation: ml-flow 1.4s linear infinite; cursor: progress; }
+    @@keyframes ml-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+    .ml-btn-light { color: #fff; border: 1.5px solid rgba(255,255,255,.55); background: rgba(255,255,255,.08); }
+    .ml-btn-light:hover { color: var(--dhs-navy); background: #fff; border-color: #fff; }
+    .ml-btn-add { color: var(--dhs-navy); background: var(--dhs-blue); border: 0; box-shadow: 0 10px 22px -10px rgba(94,168,211,.9); }
+    .ml-btn-add:hover { color: var(--dhs-navy); background: #b4d9f2; box-shadow: 0 14px 26px -10px rgba(94,168,211,1); }
+    .ml-btn-primary { color: #fff; border: 0; background: linear-gradient(135deg, var(--dhs-navy), var(--dhs-navy-mid)); box-shadow: 0 10px 22px -10px rgba(11,42,74,.6); }
+    .ml-btn-primary:hover { color: #fff; box-shadow: 0 14px 26px -10px rgba(11,42,74,.7); }
+    .ml-btn-ghost { color: var(--dhs-navy); background: #fff; border: 1.5px solid #e2e8f0; }
+    .ml-btn-ghost:hover { color: var(--dhs-navy); border-color: var(--dhs-blue-dark); background: var(--dhs-light); }
+    .ml-btn-sm { padding: .35rem .75rem; font-size: .8rem; border-radius: 10px; }
+
+    /* ── Toolbar ── */
+    .ml-toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+    .ml-filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .ml-filter { border: 1.5px solid #e2e8f0; background: #fff; color: var(--dhs-navy); border-radius: 99px; padding: .4rem .95rem; font-size: .85rem; font-weight: 600; }
+    .ml-filter i { color: var(--dhs-blue-dark); }
+    .ml-filter.active { background: var(--dhs-navy); border-color: var(--dhs-navy); color: #fff; }
+    .ml-filter.active i { color: var(--dhs-blue); }
+    .ml-filter .count { opacity: .65; font-weight: 500; margin-left: .2rem; }
+    .ml-search { border-radius: 12px; border: 1.5px solid #e2e8f0; padding: .5rem .8rem .5rem 2.2rem; min-width: 240px; font-size: .9rem;
+        background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398l3.85 3.85a1 1 0 0 0 1.415-1.414zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0'/%3E%3C/svg%3E") no-repeat .8rem center; }
+    .ml-search:focus { outline: none; border-color: var(--dhs-blue-dark); box-shadow: 0 0 0 4px rgba(151,200,233,.35); }
+
+    /* ── Meal cards ── */
+    .ml-rise { opacity: 0; transform: translateY(14px); animation: ml-rise .55s var(--ease-spring) forwards; animation-delay: calc(var(--i, 0) * 45ms); }
+    @@keyframes ml-rise { to { opacity: 1; transform: none; } }
+    .ml-card { height: 100%; display: flex; flex-direction: column; border-radius: 20px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient);
+        overflow: hidden; transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; }
+    .ml-card:hover { transform: translateY(-6px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    .ml-card.is-hidden { opacity: .6; }
+    .ml-photo { position: relative; height: 150px; background: #f1f5f9; overflow: hidden; }
+    .ml-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s var(--ease-spring); }
+    .ml-card:hover .ml-photo img { transform: scale(1.06); }
+    .ml-photo .ph { height: 100%; display: grid; place-items: center; color: #94a3b8; font-size: 2.4rem; }
+    .ml-type { position: absolute; left: .7rem; top: .7rem; padding: .25rem .6rem; border-radius: 99px; font-size: .72rem; font-weight: 700;
+        background: rgba(255,255,255,.92); color: var(--dhs-navy); backdrop-filter: blur(4px); }
+    .ml-type i { color: var(--dhs-blue-dark); }
+    .ml-hidden-tag { position: absolute; right: .7rem; top: .7rem; padding: .25rem .6rem; border-radius: 99px; font-size: .72rem; font-weight: 700; background: var(--dhs-grey); color: #fff; }
+    .ml-body { padding: 1rem 1.1rem .9rem; display: flex; flex-direction: column; flex-grow: 1; }
+    .ml-name { font-size: 1.08rem; font-weight: 700; color: var(--dhs-navy); line-height: 1.3; margin: 0; }
+    .ml-desc { font-size: .82rem; color: var(--dhs-grey); line-height: 1.5; margin: .3rem 0 .75rem;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.46em; }
+    .ml-facts { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .9rem; }
+    .ml-fact { font-size: .74rem; padding: .22rem .55rem; border-radius: 8px; background: var(--dhs-light); color: var(--dhs-navy); }
+    .ml-fact i { color: var(--dhs-blue-dark); }
+    .ml-actions { margin-top: auto; display: flex; gap: .4rem; }
+    .ml-empty { border-radius: 20px; border: 1.5px dashed var(--dhs-blue); background: var(--dhs-light); padding: 3rem 1rem; text-align: center; color: var(--dhs-navy); }
+    .ml-empty h5 { font-size: 1.15rem; font-weight: 700; }
+    .ml-empty p { font-size: .88rem; color: var(--dhs-grey); }
+
+    /* ── Pop-ups: bubble pop ── */
+    .ml-modal .modal-dialog { transform: scale(.55) !important; opacity: 0; transition: transform .5s cubic-bezier(.34,1.56,.64,1), opacity .25s ease !important; }
+    .ml-modal.show .modal-dialog { transform: scale(1) !important; opacity: 1; }
+    .ml-modal .modal-content { border: 0; border-radius: 24px; overflow: hidden; box-shadow: 0 40px 80px -30px rgba(11,42,74,.55); }
+    .ml-modal-head { position: relative; overflow: hidden; padding: 1.3rem 1.5rem; color: #fff;
+        background: linear-gradient(120deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 60%, var(--dhs-blue-dark) 100%); }
+    .ml-modal-head h5 { font-size: 1.3rem; font-weight: 700; margin: 0; position: relative; z-index: 1; }
+    .ml-modal-head p { font-size: .85rem; margin: .2rem 0 0; color: rgba(255,255,255,.75); position: relative; z-index: 1; }
+    .ml-modal-head .btn-close { position: absolute; right: 1rem; top: 1rem; z-index: 2; filter: invert(1); opacity: .8; }
+    .ml-bubble { position: absolute; border-radius: 50%; background: rgba(151,200,233,.35); transform: scale(0); }
+    .ml-modal.show .ml-bubble { animation: ml-bubble .7s cubic-bezier(.34,1.56,.64,1) forwards; }
+    .ml-bubble.b1 { width: 90px; height: 90px; right: 50px; top: -30px; animation-delay: .15s !important; }
+    .ml-bubble.b2 { width: 46px; height: 46px; right: 150px; top: 30px; animation-delay: .25s !important; background: rgba(255,255,255,.18); }
+    .ml-bubble.b3 { width: 24px; height: 24px; right: 22px; bottom: 10px; animation-delay: .35s !important; }
+    @@keyframes ml-bubble { to { transform: scale(1); } }
+    .ml-modal .modal-body { padding: 1.4rem 1.5rem; }
+    .ml-modal .modal-footer { border-top: 1px solid #f1f5f9; padding: .9rem 1.5rem; }
+    #mealViewImage { width: 100%; height: 230px; object-fit: cover; }
+    .ml-view-ph { height: 180px; background: #f1f5f9; color: #94a3b8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; font-size: .85rem; }
+    .ml-view-ph i { font-size: 2.4rem; }
+    .ml-view-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dhs-grey); margin-bottom: .4rem; }
+    .ml-view-desc { font-size: .92rem; color: #334155; }
+    .ml-ing { list-style: none; padding: 0; margin: 0; display: grid; gap: .3rem; }
+    .ml-ing li { font-size: .86rem; padding: .4rem .65rem; border-radius: 10px; background: var(--dhs-light); color: var(--dhs-navy); }
+
+    /* ── Toast after adding a meal ── */
+    .ml-toast { position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 1080; display: flex; align-items: center; gap: .6rem; padding: .8rem 1.1rem; border-radius: 16px;
+        background: var(--dhs-navy); color: #fff; box-shadow: var(--shadow-pop); animation: ml-toast .5s cubic-bezier(.34,1.56,.64,1); }
+    .ml-toast i { color: var(--dhs-blue); font-size: 1.2rem; }
+    @@keyframes ml-toast { from { opacity: 0; transform: translateY(20px) scale(.9); } }
+
+    @@media (max-width: 575.98px) { .ml-search { min-width: 0; width: 100%; } }
+    @@media (prefers-reduced-motion: reduce) {
+        .ml-header::after, .ml-rise, .ml-toast, .ml-modal.show .ml-bubble { animation: none; opacity: 1; transform: none; }
+        .ml-modal .modal-dialog { transition: opacity .2s !important; transform: none !important; }
+        .ml-card, .ml-photo img, .ml-btn { transition: none; }
+        .ml-btn.is-pressed { animation: none; }
+        .ml-btn.is-busy { animation-duration: 6s; }
+    }
+</style>
+
+<div class="page-header ml-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-journal-richtext me-2"></i>Meal Library</h2>
+        <p>@activeCount meal(s) ready for planning@(hiddenCount > 0 ? $" · {hiddenCount} hidden" : "")</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="MealPlan" class="btn ml-btn ml-btn-light"><i class="bi bi-calendar3 me-1"></i>Meal Plans</a>
+        <button type="button" class="btn ml-btn ml-btn-add" data-bs-toggle="modal" data-bs-target="#addMealModal"><i class="bi bi-plus-circle me-1"></i>Add New Meal</button>
+    </div>
+</div>
+
+@if (!Model.Meals.Any())
+{
+    <div class="ml-empty">
+        <i class="bi bi-egg-fried fs-1 d-block mb-2" style="color:var(--dhs-blue-dark)"></i>
+        <h5>Your meal library is empty</h5>
+        <p>Add your first meal — it can then be picked when planning a week.</p>
+        <button type="button" class="btn ml-btn ml-btn-primary" data-bs-toggle="modal" data-bs-target="#addMealModal"><i class="bi bi-plus-circle me-1"></i>Add New Meal</button>
+    </div>
+}
+else
+{
+    <div class="ml-toolbar">
+        <div class="ml-filters" role="group" aria-label="Filter meals">
+            <button type="button" class="btn ml-btn ml-filter active" data-filter="all">All<span class="count">@Model.Meals.Count</span></button>
+            @foreach (var t in new[] { "Breakfast", "Lunch", "Dinner" })
+            {
+                <button type="button" class="btn ml-btn ml-filter" data-filter="@t"><i class="bi @TypeIcon(t) me-1"></i>@t<span class="count">@Model.Meals.Count(m => m.MealType == t)</span></button>
+            }
+            @if (hiddenCount > 0)
+            {
+                <button type="button" class="btn ml-btn ml-filter" data-filter="hidden"><i class="bi bi-eye-slash me-1"></i>Hidden<span class="count">@hiddenCount</span></button>
+            }
+        </div>
+        <input type="search" class="ml-search" id="mealSearch" placeholder="Search meals or ingredients…" aria-label="Search meals" autocomplete="off" />
+    </div>
+
+    <div class="row g-3" id="mealGrid">
+        @for (var i = 0; i < Model.Meals.Count; i++)
+        {
+            var m = Model.Meals[i];
+            var detail = System.Text.Json.JsonSerializer.Serialize(new { m.Name, m.MealType, m.Description, m.ImageUrl, m.IngredientLines, cost = m.CostPerServing.ToString("N2"), prep = m.PrepMinutesPerServing.ToString("0.#") }, jsonOpts);
+            var searchText = (m.Name + " " + m.Description + " " + string.Join(" ", m.IngredientLines)).ToLowerInvariant();
+            <div class="col-sm-6 col-lg-4 col-xl-3 ml-rise" style="--i:@Math.Min(i, 16)" data-meal data-type="@m.MealType" data-active="@(m.IsActive ? "1" : "0")" data-search="@searchText">
+                <article class="ml-card @(m.IsActive ? "" : "is-hidden")">
+                    <div class="ml-photo">
+                        @if (!string.IsNullOrEmpty(m.ImageUrl))
+                        {
+                            <img src="@m.ImageUrl" alt="@m.Name" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="ph"><i class="bi bi-image" aria-hidden="true"></i></div>
+                        }
+                        <span class="ml-type"><i class="bi @TypeIcon(m.MealType) me-1"></i>@m.MealType</span>
+                        @if (!m.IsActive) { <span class="ml-hidden-tag">Hidden</span> }
+                    </div>
+                    <div class="ml-body">
+                        <h3 class="ml-name">@m.Name</h3>
+                        <p class="ml-desc">@(string.IsNullOrWhiteSpace(m.Description) ? "No description yet." : m.Description)</p>
+                        <div class="ml-facts">
+                            <span class="ml-fact"><i class="bi bi-cash-coin me-1"></i>R@(m.CostPerServing.ToString("N2")) / serving</span>
+                            <span class="ml-fact"><i class="bi bi-stopwatch me-1"></i>@m.PrepMinutesPerServing.ToString("0.#") min</span>
+                            <span class="ml-fact"><i class="bi bi-basket me-1"></i>@m.IngredientLines.Count ingredient(s)</span>
+                        </div>
+                        <div class="ml-actions">
+                            <button type="button" class="btn ml-btn ml-btn-sm ml-btn-primary view-meal flex-grow-1" data-detail="@detail"><i class="bi bi-eye me-1"></i>View</button>
+                            <a asp-action="MealEdit" asp-route-id="@m.Id" class="btn ml-btn ml-btn-sm ml-btn-ghost" aria-label="Edit @m.Name"><i class="bi bi-pencil"></i></a>
+                            <form method="post" asp-action="ToggleMeal" class="m-0">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <button type="submit" class="btn ml-btn ml-btn-sm ml-btn-ghost" title="@(m.IsActive ? "Hide from planning" : "Show for planning")" aria-label="@(m.IsActive ? "Hide" : "Show") @m.Name">
+                                    <i class="bi @(m.IsActive ? "bi-eye-slash" : "bi-eye")"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        }
+    </div>
+    <div class="ml-empty mt-2" id="noMatches" hidden>
+        <h5>No meals match</h5>
+        <p class="mb-0">Try another search or filter.</p>
+    </div>
+}
+
+<!-- Add New Meal pop-up -->
+<div class="modal fade ml-modal" id="addMealModal" tabindex="-1" aria-labelledby="addMealTitle">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <form id="addMealForm" asp-action="SaveMeal" method="post" enctype="multipart/form-data" class="d-flex flex-column" style="min-height:0; flex:1 1 auto; overflow:hidden">
+                @Html.AntiForgeryToken()
+                <div class="ml-modal-head">
+                    <span class="ml-bubble b1"></span><span class="ml-bubble b2"></span><span class="ml-bubble b3"></span>
+                    <h5 id="addMealTitle">Add New Meal</h5>
+                    <p>Name, photo and ingredients per serving — cost is worked out for you.</p>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger small py-2" id="addMealError" hidden></div>
+                    <partial name="_MealForm" model="Model.NewMeal" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn ml-btn ml-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn ml-btn ml-btn-primary" id="addMealSave"><span data-label><i class="bi bi-check2-circle me-1"></i>Save Meal</span></button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View meal pop-up -->
+<div class="modal fade ml-modal" id="mealViewModal" tabindex="-1" aria-labelledby="mealViewName">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <img id="mealViewImage" alt="" hidden />
+            <div id="mealViewNoImage" class="ml-view-ph" hidden><i class="bi bi-image"></i><span>No photo yet — edit the meal to add one</span></div>
+            <div class="ml-modal-head">
+                <span class="ml-bubble b1"></span><span class="ml-bubble b3"></span>
+                <h5 id="mealViewName"></h5>
+                <p id="mealViewMeta"></p>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="ml-view-label">About</div>
+                <p id="mealViewDescription" class="ml-view-desc mb-3"></p>
+                <div class="ml-view-label">Ingredients per serving</div>
+                <ul id="mealViewIngredients" class="ml-ing"></ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn ml-btn ml-btn-ghost" data-bs-dismiss="modal">Close</button>
+                <a class="btn ml-btn ml-btn-primary" id="mealViewEdit"><i class="bi bi-pencil me-1"></i>Edit Meal</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // ── Moving gradient on every button press ──
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('.ml-btn');
+        if (!btn || btn.classList.contains('is-busy')) return;
+        btn.classList.remove('is-pressed');
+        void btn.offsetWidth;                       // restart the animation on quick repeat clicks
+        btn.classList.add('is-pressed');
+    });
+    document.addEventListener('animationend', e => {
+        if (e.animationName === 'ml-flow') e.target.classList.remove('is-pressed');
+    });
+    // Hide/Show posts the page: keep the gradient moving until it reloads
+    document.querySelectorAll('form[action*="ToggleMeal"]').forEach(f => f.addEventListener('submit', () => {
+        const b = f.querySelector('button'); b.classList.add('is-busy'); b.disabled = true;
+    }));
+
+    // ── Filter & search ──
+    let filter = 'all';
+    const search = document.getElementById('mealSearch');
+    function applyFilter() {
+        const q = (search?.value || '').trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('[data-meal]').forEach(card => {
+            const okFilter = filter === 'all' || (filter === 'hidden' ? card.dataset.active === '0' : card.dataset.type === filter);
+            const ok = okFilter && (!q || card.dataset.search.includes(q));
+            card.hidden = !ok;
+            if (ok) shown++;
+        });
+        const none = document.getElementById('noMatches');
+        if (none) none.hidden = shown > 0;
+    }
+    document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => {
+        document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('active', x === b));
+        filter = b.dataset.filter;
+        applyFilter();
+    }));
+    search?.addEventListener('input', applyFilter);
+
+    // ── View pop-up ──
+    document.querySelectorAll('.view-meal').forEach(btn => btn.addEventListener('click', () => {
+        const d = JSON.parse(btn.dataset.detail);
+        document.getElementById('mealViewName').textContent = d.name;
+        document.getElementById('mealViewMeta').textContent = `${d.mealType} · R${d.cost} per serving · ${d.prep} min prep`;
+        document.getElementById('mealViewDescription').textContent = d.description || 'No description provided.';
+        const img = document.getElementById('mealViewImage');
+        img.hidden = !d.imageUrl;
+        document.getElementById('mealViewNoImage').hidden = !!d.imageUrl;
+        if (d.imageUrl) { img.src = d.imageUrl; img.alt = d.name; }
+        document.getElementById('mealViewEdit').href = btn.closest('.ml-card').querySelector('a[href*="MealEdit"]').href;
+        const list = document.getElementById('mealViewIngredients');
+        list.innerHTML = '';
+        (d.ingredientLines.length ? d.ingredientLines : ['Not listed']).forEach(i => {
+            const li = document.createElement('li'); li.textContent = i; list.appendChild(li);
+        });
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('mealViewModal')).show();
+    }));
+
+    // ── Add New Meal: saved in the background so a mistake keeps everything typed (and the photo) ──
+    const form = document.getElementById('addMealForm');
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        if (!form.reportValidity()) return;
+        const err = document.getElementById('addMealError'), btn = document.getElementById('addMealSave');
+        const label = btn.querySelector('[data-label]'), original = label.innerHTML;
+        err.hidden = true;
+        btn.disabled = true; btn.classList.add('is-busy');
+        label.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…';
+        try {
+            const res = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message);
+            try { sessionStorage.setItem('ml-added', data.meal.name); } catch { }
+            location.reload();
+        } catch (ex) {
+            err.textContent = ex.message || 'Could not save the meal. Please try again.';
+            err.hidden = false;
+            err.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            btn.disabled = false; btn.classList.remove('is-busy');
+            label.innerHTML = original;
+        }
+    });
+
+    // Confirmation after the page reloads with the new meal
+    let added = null;
+    try { added = sessionStorage.getItem('ml-added'); sessionStorage.removeItem('ml-added'); } catch { }
+    if (added) {
+        const t = document.createElement('div');
+        t.className = 'ml-toast'; t.setAttribute('role', 'status');
+        t.innerHTML = '<i class="bi bi-check-circle-fill"></i><span></span>';
+        t.querySelector('span').textContent = `"${added}" was added to the meal library.`;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 4000);
+    }
+})();
+</script>
+}

@@ -1,0 +1,97 @@
+@model IList<AttendanceSummaryRow>
+@{
+    ViewData["Title"] = "Attendance Report";
+    var classes   = ViewBag.Classes   as List<Class> ?? new();
+    var classId   = ViewBag.ClassId   as int?;
+    var className = ViewBag.ClassName as string ?? "";
+    DateTime from = ViewBag.FromDate is DateTime fd ? fd : DateTime.Today.AddDays(-30);
+    DateTime to   = ViewBag.ToDate   is DateTime td ? td : DateTime.Today;
+}
+
+<div class="page-header"><h2><i class="bi bi-calendar-check me-2"></i>Attendance Report</h2>
+    <p>Generate attendance summaries per class</p>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Class</label>
+                <select name="classId" class="form-select">
+                    <option value="">— Select Class —</option>
+                    @foreach (var c in classes)
+                    {
+                        if (classId == c.Id)
+                        {
+                            <option value="@c.Id" selected>@c.DisplayName</option>
+                        }
+                        else
+                        {
+                            <option value="@c.Id">@c.DisplayName</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">From</label>
+                <input type="date" name="from" value="@from.ToString("yyyy-MM-dd")" class="form-control" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">To</label>
+                <input type="date" name="to" value="@to.ToString("yyyy-MM-dd")" class="form-control" />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-dhs-primary w-100">Generate</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (classId.HasValue)
+{
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">@className — @from.ToString("dd MMM yyyy") to @to.ToString("dd MMM yyyy")</h5>
+        </div>
+        <div class="card-body p-0">
+            @if (!Model.Any())
+            {
+                <div class="p-4 text-center text-muted">No attendance records found for this period.</div>
+            }
+            else
+            {
+                <table class="table table-dhs mb-0">
+                    <thead>
+                        <tr>
+                            <th>Learner</th>
+                            <th class="text-center text-success">Present</th>
+                            <th class="text-center text-danger">Absent</th>
+                            <th class="text-center text-warning">Late</th>
+                            <th class="text-center">Total</th>
+                            <th class="text-center">Attendance %</th>
+                            <th class="text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in Model)
+                    {
+                        var pct    = row.AttendancePct;
+                        var pcCss  = pct >= 80 ? "text-success" : pct >= 60 ? "text-warning" : "text-danger";
+                        var status = pct >= 80 ? "Good" : pct >= 60 ? "At Risk" : "Critical";
+                        var badgeCss = pct >= 80 ? "badge-approved" : pct >= 60 ? "badge-pending" : "badge-rejected";
+                        <tr>
+                            <td><strong>@row.LearnerName</strong></td>
+                            <td class="text-center"><span class="badge bg-success rounded-pill">@row.Present</span></td>
+                            <td class="text-center"><span class="badge bg-danger rounded-pill">@row.Absent</span></td>
+                            <td class="text-center"><span class="badge bg-warning text-dark rounded-pill">@row.Late</span></td>
+                            <td class="text-center">@row.Total</td>
+                            <td class="text-center fw-bold @pcCss">@pct%</td>
+                            <td class="text-center"><span class="badge rounded-pill @badgeCss">@status</span></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}

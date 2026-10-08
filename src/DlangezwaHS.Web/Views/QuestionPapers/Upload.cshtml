@@ -1,0 +1,167 @@
+﻿@{
+    ViewData["Title"] = "Upload Question Paper";
+    var subjects = ViewBag.Subjects as IEnumerable<Subject> ?? Enumerable.Empty<Subject>();
+    var grades = ViewBag.Grades as IEnumerable<Grade> ?? Enumerable.Empty<Grade>();
+    var terms = ViewBag.Terms as IEnumerable<string> ?? Enumerable.Empty<string>();
+    var years = ViewBag.AcademicYears as IEnumerable<int> ?? Enumerable.Empty<int>();
+    var paperTypes = ViewBag.PaperTypes as IEnumerable<AssessmentType> ?? Enumerable.Empty<AssessmentType>();
+}
+
+<div class="mb-4">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to Question Papers
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-cloud-upload me-2"></i>Upload Question Paper</h5>
+            </div>
+            <div class="card-body">
+
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        @foreach (var err in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                        {
+                            <div>@err.ErrorMessage</div>
+                        }
+                    </div>
+                }
+
+                <form method="post" enctype="multipart/form-data" asp-action="Upload">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Paper Title <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control"
+                               placeholder="e.g. Mathematics Term 2 Test"
+                               required maxlength="200" />
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold">Subject <span class="text-danger">*</span></label>
+                            <select name="subjectId" class="form-select" required>
+                                <option value="">— Select Subject —</option>
+                                @foreach (var s in subjects)
+                                {
+                                    <option value="@s.Id">@s.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold">Grade <span class="text-danger">*</span></label>
+                            <select name="gradeId" class="form-select" required>
+                                <option value="">— Select Grade —</option>
+                                @foreach (var g in grades)
+                                {
+                                    <option value="@g.Id">@g.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <label class="form-label fw-semibold">Term <span class="text-danger">*</span></label>
+                            <select name="term" class="form-select" required>
+                                @foreach (var t in terms)
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label fw-semibold">Academic Year <span class="text-danger">*</span></label>
+                            <select name="academicYear" class="form-select" required>
+                                @foreach (var y in years)
+                                {
+                                    <option value="@y" selected="@(y == DateTime.UtcNow.Year)">@y</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label fw-semibold">Paper Type <span class="text-danger">*</span></label>
+                            <select name="paperType" class="form-select" required>
+                                @foreach (var pt in paperTypes)
+                                {
+                                    <option value="@pt">@pt</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- File upload -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">File <span class="text-danger">*</span></label>
+                        <div id="dropZone" class="border border-2 border-dashed rounded-3 p-4 text-center" style="cursor:pointer; border-color: var(--dhs-blue-dark) !important; transition: background .2s;">
+                            <i class="bi bi-cloud-arrow-up fs-1 text-primary mb-2 d-block"></i>
+                            <p class="mb-1 fw-semibold">Drag & drop or click to browse</p>
+                            <p class="text-muted small mb-2">PDF or DOCX · Maximum 3 MB</p>
+                            <input type="file" id="fileInput" name="file" class="d-none"
+                                   accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                   required />
+                            <span id="fileName" class="badge bg-primary d-none"></span>
+                        </div>
+                        <div id="fileSizeWarning" class="text-danger small mt-1 d-none">
+                            <i class="bi bi-exclamation-triangle me-1"></i>File is larger than 3 MB.
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info small">
+                        <i class="bi bi-info-circle me-2"></i>
+                        After uploading, the paper will be sent to the Admin for review. It will only become available to learners after the Admin approves and releases it.
+                        Papers are automatically deleted after <strong>3 years</strong>.
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="btn btn-primary w-100">
+                        <i class="bi bi-cloud-upload me-2"></i>Submit for Approval
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const dropZone  = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileName  = document.getElementById('fileName');
+        const warnEl    = document.getElementById('fileSizeWarning');
+        const submitBtn = document.getElementById('submitBtn');
+        const MAX_BYTES = 3 * 1024 * 1024;
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', e => {
+            e.preventDefault();
+            dropZone.style.background = 'rgba(151,200,233,.15)';
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.style.background = '');
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.style.background = '';
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
+
+        function handleFile(file) {
+            const tooLarge = file.size > MAX_BYTES;
+            warnEl.classList.toggle('d-none', !tooLarge);
+            submitBtn.disabled = tooLarge;
+            fileName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+            fileName.classList.remove('d-none');
+        }
+    </script>
+}

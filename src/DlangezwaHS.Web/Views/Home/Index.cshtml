@@ -1,0 +1,335 @@
+@{
+    ViewData["Title"] = "Welcome";
+    ViewData["FullWidth"] = true;
+    Layout = "_Layout";
+}
+
+<!-- ═══ Hero ═══════════════════════════════════════════════════════════════ -->
+<section class="lp-hero">
+    <!-- School photos behind the hero: blurred, cross-fading, under the brand gradient -->
+    <div class="lp-hero-bg" aria-hidden="true">
+        <div class="lp-hero-slide active" style="background-image:url('@Url.Content("~/images/hero/donation-day.jpg")')"></div>
+        <div class="lp-hero-slide" style="background-image:url('@Url.Content("~/images/hero/learners-and-staff.jpg")')"></div>
+        <div class="lp-hero-slide" style="background-image:url('@Url.Content("~/images/hero/assembly.jpg")')"></div>
+        <div class="lp-hero-slide" style="background-image:url('@Url.Content("~/images/hero/prefects.jpg")')"></div>
+        <div class="lp-hero-slide" style="background-image:url('@Url.Content("~/images/hero/reading.jpg")')"></div>
+    </div>
+    <div class="lp-hero-overlay" aria-hidden="true"></div>
+    <div class="container position-relative" style="z-index:2;">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-7">
+                <span class="lp-eyebrow mb-4"><i class="bi bi-geo-alt-fill"></i> KwaZulu-Natal · Grades 8–12 · Day &amp; Boarding</span>
+                <h1 class="mb-4">Nurturing excellence,<br/><span class="accent">shaping tomorrow's leaders.</span></h1>
+                <p class="lead mb-4">
+                    Dlangezwa High School offers a disciplined, caring environment where learners grow academically,
+                    socially and personally — supported by a modern online portal for parents, learners and staff.
+                </p>
+                <div class="d-flex flex-wrap gap-3">
+                    <a asp-controller="Account" asp-action="Register" class="btn btn-light btn-lg" style="color:var(--dhs-navy);">
+                        <i class="bi bi-person-plus me-2"></i>Sign Up &amp; Apply
+                    </a>
+                    <a asp-controller="Account" asp-action="Login" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                    </a>
+                </div>
+                <p class="small mt-3 mb-0" style="opacity:.7;">
+                    New parent? Create an account to apply for admission. Already registered? Sign in to your portal.
+                </p>
+            </div>
+            <div class="col-lg-5">
+                <div class="lp-portal-card">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <strong class="fs-5">The DHS Portal</strong>
+                        <span class="badge rounded-pill" style="background:rgba(151,200,233,.2);color:var(--dhs-blue);">Online 24/7</span>
+                    </div>
+                    <div class="item"><i class="bi bi-file-earmark-plus"></i><div><strong>Online admissions</strong><span>Apply, upload documents and track your application.</span></div></div>
+                    <div class="item"><i class="bi bi-graph-up-arrow"></i><div><strong>Academic progress</strong><span>Marks, reports, attendance and timetables in one place.</span></div></div>
+                    <div class="item"><i class="bi bi-building"></i><div><strong>Boarding &amp; meals</strong><span>Room allocation, leave requests and weekly menus.</span></div></div>
+                    <div class="item"><i class="bi bi-wallet2"></i><div><strong>Fees &amp; payments</strong><span>Pay online and receive proof of registration by email.</span></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ Quick facts ════════════════════════════════════════════════════════ -->
+<div class="container lp-facts">
+    <div class="row g-3">
+        @foreach (var (icon, title, sub) in new[] {
+            ("bi-mortarboard",  "Grades 8 – 12",       "CAPS curriculum, NSC matric"),
+            ("bi-house-heart",  "Day & Boarding",      "Safe, supervised hostel life"),
+            ("bi-trophy",       "Sport & Culture",     "A full extracurricular programme"),
+            ("bi-bus-front",    "Learner Transport",   "Scheduled school bus routes")
+        })
+        {
+            <div class="col-6 col-lg-3">
+                <div class="lp-fact"><i class="bi @icon"></i><div><strong>@title</strong><span>@sub</span></div></div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ═══ About ══════════════════════════════════════════════════════════════ -->
+<section id="about" class="lp-section">
+    <div class="container">
+        <div class="row g-5 align-items-center">
+            <div class="col-lg-6">
+                <div class="lp-kicker mb-2">About our school</div>
+                <h2 class="lp-title mb-3">A proud community school in the heart of Zululand</h2>
+                <p class="lp-sub mb-4">
+                    Located in Dlangezwa, KwaZulu-Natal, our school serves learners from across the region as both
+                    day scholars and boarders. We believe every learner can succeed when high expectations are matched
+                    with genuine care — in the classroom, on the sports field and in the residence.
+                </p>
+                <ul class="lp-check mb-4">
+                    <li><i class="bi bi-check-circle-fill"></i>Dedicated, qualified educators focused on results</li>
+                    <li><i class="bi bi-check-circle-fill"></i>Strong values of respect, discipline and Ubuntu</li>
+                    <li><i class="bi bi-check-circle-fill"></i>Close partnership between school and parents</li>
+                    <li><i class="bi bi-check-circle-fill"></i>Supervised boarding with nutritious daily meals</li>
+                </ul>
+                <a asp-controller="Home" asp-action="Contact" class="btn btn-dhs-primary">
+                    <i class="bi bi-chat-dots me-2"></i>Get in touch
+                </a>
+            </div>
+            <div class="col-lg-6">
+                <div id="campusCarousel" class="lp-about-visual lp-campus carousel slide" data-bs-ride="carousel" data-bs-interval="4500" data-bs-touch="true" aria-label="Photos of the school campus">
+                    <div class="carousel-inner">
+                        <div class="carousel-item active">
+                            <img src="~/images/campus/main-block.webp" class="lp-slide-img" alt="Main classroom block at Dlangezwa High School" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>Main classroom block</span>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="~/images/campus/entrance-sign.webp" class="lp-slide-img" alt="School entrance at Dlangezwa High School" loading="lazy" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>School entrance</span>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="~/images/campus/reception.webp" class="lp-slide-img" alt="Reception at Dlangezwa High School" loading="lazy" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>Reception</span>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="~/images/campus/classroom-walkway.webp" class="lp-slide-img" alt="Classroom walkway at Dlangezwa High School" loading="lazy" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>Classroom walkway</span>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="~/images/campus/chess-garden.webp" class="lp-slide-img" alt="Chess garden at Dlangezwa High School" loading="lazy" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>Chess garden</span>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="~/images/campus/north-block.webp" class="lp-slide-img" alt="North block at Dlangezwa High School" loading="lazy" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>North block</span>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="~/images/campus/gatehouse.webp" class="lp-slide-img" alt="Gatehouse at Dlangezwa High School" loading="lazy" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>Gatehouse</span>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="~/images/campus/courtyard.webp" class="lp-slide-img" alt="Courtyard at Dlangezwa High School" loading="lazy" draggable="false" />
+                            <span class="lp-slide-tag"><i class="bi bi-geo-alt-fill me-1"></i>Courtyard</span>
+                        </div>
+                    </div>
+                    <div class="lp-campus-shade" aria-hidden="true"></div>
+                    <div class="lp-campus-text">
+                        <div class="lp-kicker mb-2" style="color:var(--dhs-blue);">Our mission</div>
+                        <blockquote>
+                            “To provide quality education in a safe, disciplined environment that develops
+                            responsible, confident and capable young people.”
+                        </blockquote>
+                    </div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#campusCarousel" data-bs-slide="prev" aria-label="Previous photo"><i class="bi bi-chevron-left"></i></button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#campusCarousel" data-bs-slide="next" aria-label="Next photo"><i class="bi bi-chevron-right"></i></button>
+                    <div class="carousel-indicators">
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Main classroom block"></button>
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="1" aria-label="School entrance"></button>
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="2" aria-label="Reception"></button>
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="3" aria-label="Classroom walkway"></button>
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="4" aria-label="Chess garden"></button>
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="5" aria-label="North block"></button>
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="6" aria-label="Gatehouse"></button>
+                        <button type="button" data-bs-target="#campusCarousel" data-bs-slide-to="7" aria-label="Courtyard"></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mt-4">
+            @foreach (var (icon, title, desc) in new[] {
+                ("bi-stars",          "Excellence", "We set high standards and support every learner to reach them."),
+                ("bi-people",         "Ubuntu",     "We respect one another and grow together as a community."),
+                ("bi-shield-check",   "Discipline", "Order and accountability create space for learning."),
+                ("bi-lightbulb",      "Curiosity",  "We encourage questions, creativity and a love of learning.")
+            })
+            {
+                <div class="col-sm-6 col-lg-3">
+                    <div class="lp-tile">
+                        <div class="ico"><i class="bi @icon"></i></div>
+                        <h5>@title</h5>
+                        <p>@desc</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<!-- ═══ Academics ══════════════════════════════════════════════════════════ -->
+<section id="academics" class="lp-section alt">
+    <div class="container">
+        <div class="text-center mb-5">
+            <div class="lp-kicker mb-2">Academics</div>
+            <h2 class="lp-title mb-3">A clear path from Grade 8 to Matric</h2>
+            <p class="lp-sub mx-auto">We follow the national CAPS curriculum, preparing learners for the National Senior Certificate and for life beyond school.</p>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="lp-phase">
+                    <span class="tag mb-3">Grades 8 – 9 · Senior Phase</span>
+                    <h4 class="fw-bold mt-3" style="color:var(--dhs-navy);">Building strong foundations</h4>
+                    <p class="text-muted">A broad curriculum that develops core literacy, numeracy and thinking skills before subject choices.</p>
+                    <div>
+                        @foreach (var s in new[] { "isiZulu", "English", "Mathematics", "Natural Sciences", "Social Sciences", "Technology", "EMS", "Life Orientation", "Creative Arts" })
+                        { <span class="lp-chip">@s</span> }
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="lp-phase">
+                    <span class="tag mb-3">Grades 10 – 12 · FET Phase</span>
+                    <h4 class="fw-bold mt-3" style="color:var(--dhs-navy);">Specialised streams to matric</h4>
+                    <p class="text-muted">Learners choose a stream that matches their strengths and future studies or careers.</p>
+                    <div>
+                        @foreach (var s in new[] { "Physical Sciences", "Life Sciences", "Mathematics", "Accounting", "Business Studies", "Economics", "Geography", "History", "Agricultural Sciences" })
+                        { <span class="lp-chip">@s</span> }
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row g-4 mt-1">
+            @foreach (var (icon, title, desc) in new[] {
+                ("bi-clipboard2-data", "Continuous assessment", "Regular tests and tasks, with marks visible to parents online."),
+                ("bi-journals",        "Past question papers",  "A growing library of past papers to help learners prepare."),
+                ("bi-calendar3-week",  "Structured timetable",  "Clear daily schedules for every class, available on the portal.")
+            })
+            {
+                <div class="col-md-4">
+                    <div class="lp-tile">
+                        <div class="ico"><i class="bi @icon"></i></div>
+                        <h5>@title</h5>
+                        <p>@desc</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<!-- ═══ Boarding & student life ════════════════════════════════════════════ -->
+<section id="boarding" class="lp-section">
+    <div class="container">
+        <div class="text-center mb-5">
+            <div class="lp-kicker mb-2">Boarding &amp; student life</div>
+            <h2 class="lp-title mb-3">More than a classroom</h2>
+            <p class="lp-sub mx-auto">A home away from home for boarders, and a full programme of activities for every learner.</p>
+        </div>
+        <div class="row g-4">
+            @foreach (var (icon, title, desc) in new[] {
+                ("bi-building-check", "Hostel accommodation", "Supervised residences with housemasters, secure check-in/out and structured study time."),
+                ("bi-egg-fried",      "Healthy meals",        "Planned weekly menus that cater for dietary needs, prepared by our kitchen team."),
+                ("bi-trophy",         "Sport & culture",      "Soccer, netball, athletics, choir, debating and more — with achievements celebrated."),
+                ("bi-bus-front",      "Safe transport",       "Scheduled school bus trips so learners get to and from school safely.")
+            })
+            {
+                <div class="col-sm-6 col-lg-3">
+                    <div class="lp-tile">
+                        <div class="ico"><i class="bi @icon"></i></div>
+                        <h5>@title</h5>
+                        <p>@desc</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<!-- ═══ Admissions steps ═══════════════════════════════════════════════════ -->
+<section id="admissions" class="lp-section alt">
+    <div class="container">
+        <div class="text-center mb-5">
+            <div class="lp-kicker mb-2">Admissions</div>
+            <h2 class="lp-title mb-3">Applying is simple</h2>
+            <p class="lp-sub mx-auto">The whole admissions process happens online — no queues, no lost paperwork.</p>
+        </div>
+        <div class="row g-2">
+            @{ var n = 0; }
+            @foreach (var (step, desc) in new[] {
+                ("Sign up",            "Create a free parent account."),
+                ("Apply",              "Complete the form and upload documents."),
+                ("Review",             "The school reviews your application."),
+                ("Enrolment",          "Your child is placed in a class."),
+                ("Accommodation",      "A bed is allocated for boarders."),
+                ("Pay & confirm",      "Pay fees and get proof of registration.")
+            })
+            {
+                n++;
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="lp-step">
+                        <div class="num">@n</div>
+                        <strong>@step</strong>
+                        <span>@desc</span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<!-- ═══ CTA ════════════════════════════════════════════════════════════════ -->
+<section class="lp-section">
+    <div class="container">
+        <div class="lp-cta">
+            <h2 class="mb-3">Ready to join the Dlangezwa family?</h2>
+            <p class="mb-4 mx-auto" style="max-width:36rem;">Create your parent account to start an application, or sign in to follow your child's progress.</p>
+            <div class="d-flex justify-content-center flex-wrap gap-3">
+                <a asp-controller="Account" asp-action="Register" class="btn btn-light btn-lg px-4 fw-semibold" style="color:var(--dhs-navy);">
+                    <i class="bi bi-person-plus me-2"></i>Sign Up
+                </a>
+                <a asp-controller="Account" asp-action="Login" class="btn btn-outline-light btn-lg px-4">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                </a>
+                <a asp-controller="Home" asp-action="Contact" class="btn btn-link btn-lg text-white text-decoration-none">
+                    Contact us <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+(function () {
+    // Hero background: next photo every 6 seconds (stays on the first one if motion is reduced)
+    const slides = document.querySelectorAll('.lp-hero-slide');
+    if (slides.length > 1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        let i = 0;
+        setInterval(() => {
+            slides[i].classList.remove('active');
+            i = (i + 1) % slides.length;
+            slides[i].classList.add('active');
+        }, 6000);
+    }
+})();
+(function () {
+    const el = document.getElementById('campusCarousel');
+    if (!el || typeof bootstrap === 'undefined') return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const carousel = bootstrap.Carousel.getOrCreateInstance(el, { interval: reduce ? false : 4500, touch: true, pause: 'hover' });
+    // Drag with a mouse too (Bootstrap only handles touch swipes)
+    let startX = null;
+    el.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && !e.target.closest('button')) { startX = e.clientX; el.classList.add('is-dragging'); } });
+    window.addEventListener('pointerup', e => {
+        if (startX === null) return;
+        const dx = e.clientX - startX; startX = null; el.classList.remove('is-dragging');
+        if (Math.abs(dx) > 50) dx < 0 ? carousel.next() : carousel.prev();
+    });
+})();
+</script>
+}

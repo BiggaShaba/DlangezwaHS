@@ -1,0 +1,80 @@
+@model EnrollLearnerViewModel
+@{ ViewData["Title"] = "Enrol Learner"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Applications">Applications</a></li>
+            <li class="breadcrumb-item active">Enrol</li>
+        </ol>
+    </nav>
+    <h2><i class="bi bi-person-badge me-2"></i>Enrol Learner</h2>
+    <p>@Model.LearnerName</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body p-4">
+                <form asp-action="Enroll" method="post" id="enroll-form">
+                    @Html.AntiForgeryToken()
+                    <input asp-for="ApplicationId" type="hidden" />
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+                    <!-- Step 1: Class -->
+                    <div class="mb-4">
+                        <label asp-for="ClassId" class="form-label fs-6 fw-bold" style="color:#0B2A4A;">
+                            <span class="step-badge step-active me-2">1</span> Assign Class
+                        </label>
+                        <select asp-for="ClassId" class="form-select" required>
+                            <option value="">— Select a class —</option>
+                            @foreach (var g in Model.AvailableClasses.GroupBy(c => c.Grade?.Name ?? ""))
+                            {
+                                <optgroup label="@g.Key">
+                                    @foreach (var c in g)
+                                    {
+                                        <option value="@c.Id">@c.DisplayName (Cap. @c.Capacity)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                        <span asp-validation-for="ClassId" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Step 2: Subjects -->
+                    <div class="mb-4">
+                        <label class="form-label fs-6 fw-bold" style="color:#0B2A4A;">
+                            <span class="step-badge step-active me-2">2</span> Assign Subjects
+                            <small class="text-muted fw-normal ms-2">(select one or more)</small>
+                        </label>
+                        <div id="subject-error" class="alert alert-danger small py-1 d-none">Please select at least one subject.</div>
+                        <div class="row g-2 mt-1">
+                            @foreach (var s in Model.AvailableSubjects)
+                            {
+                                <div class="col-6 col-md-4">
+                                    <div class="form-check border rounded p-2">
+                                        <input class="form-check-input" type="checkbox" name="SubjectIds"
+                                               value="@s.Id" id="subj_@s.Id" />
+                                        <label class="form-check-label small" for="subj_@s.Id">
+                                            <strong>@s.Name</strong>
+                                            <span class="text-muted ms-1">(@s.Code)</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-dhs-primary px-4">
+                            <i class="bi bi-check2-circle me-1"></i> Confirm Enrolment
+                        </button>
+                        <a asp-action="Applications" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

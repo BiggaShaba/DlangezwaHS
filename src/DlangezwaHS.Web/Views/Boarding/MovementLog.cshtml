@@ -1,0 +1,46 @@
+@model IList<MovementLogRow>
+@{ ViewData["Title"] = "Movement Log"; DateTime day = ViewBag.Date; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-list-ul me-2"></i>Movement Log</h2><p>Check-ins and check-outs for @day.ToString("dddd, dd MMMM yyyy")</p></div>
+    <form method="get" class="d-flex gap-2">
+        <input type="date" name="date" class="form-control" value="@day.ToString("yyyy-MM-dd")" onchange="this.form.submit()" />
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">No movements recorded for this date.</div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Time</th><th>Learner</th><th>Type</th><th>Status</th><th>Destination</th><th>Purpose</th></tr></thead>
+                <tbody>
+                @foreach (var m in Model)
+                {
+                    <tr>
+                        <td><small>@m.ScannedAt.ToString("HH:mm")</small></td>
+                        <td><strong>@m.LearnerName</strong></td>
+                        <td>@m.MovementType</td>
+                        <td>
+                            @if (m.Status == "Late")
+                            {
+                                <span class="badge badge-rejected rounded-pill">Late</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-approved rounded-pill">@m.Status</span>
+                            }
+                        </td>
+                        <td><small>@m.Destination</small></td>
+                        <td><small>@m.Purpose</small></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

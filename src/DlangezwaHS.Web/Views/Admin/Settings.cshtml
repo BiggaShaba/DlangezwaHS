@@ -1,0 +1,440 @@
+@{
+    ViewData["Title"] = "System Settings";
+    var grades    = ViewBag.Grades    as List<Grade>   ?? new();
+    var classes   = ViewBag.Classes   as List<Class>   ?? new();
+    var subjects  = ViewBag.Subjects  as List<Subject> ?? new();
+    var teachers  = ViewBag.Teachers  as List<Teacher> ?? new();
+    var feeTypes  = ViewBag.FeeTypes  as List<FeeType> ?? new();
+    var templates = ViewBag.Templates as List<EmailTemplate> ?? new();
+}
+
+<div class="page-header"><h2><i class="bi bi-gear me-2"></i>System Settings</h2><p>Configure grades, subjects, teachers, fees and email templates</p></div>
+
+<!-- Tab nav -->
+<ul class="nav nav-tabs mb-4" id="settingsTabs">
+    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-grades">Grades &amp; Classes</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-subjects">Subjects</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-employ">Employ Staff</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-fees">Fees</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-emails">Email Templates</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-boarding">Boarding Settings</a></li>
+</ul>
+
+<div class="tab-content">
+
+    <!-- ── GRADES & CLASSES ────────────────────────────────────────────── -->
+    <div class="tab-pane fade show active" id="tab-grades">
+        <div class="row g-4">
+            <div class="col-md-5">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Add Grade</h5></div>
+                    <div class="card-body">
+                        <form asp-action="SaveGrade" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-2"><label class="form-label small">Name</label><input name="Name" class="form-control form-control-sm" placeholder="Grade 8" required /></div>
+                            <div class="mb-3"><label class="form-label small">Level (8-12)</label><input name="Level" type="number" min="8" max="12" class="form-control form-control-sm" value="8" required /></div>
+                            <button type="submit" class="btn btn-dhs-primary btn-sm">Save Grade</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card mt-3">
+                    <div class="card-header"><h5 class="mb-0">Add Class</h5></div>
+                    <div class="card-body">
+                        <form asp-action="SaveClass" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-2">
+                                <label class="form-label small">Grade</label>
+                                <select name="GradeId" class="form-select form-select-sm" required>
+                                    <option value="">—</option>
+                                    @foreach (var g in grades) { <option value="@g.Id">@g.Name</option> }
+                                </select>
+                            </div>
+                            <div class="mb-2"><label class="form-label small">Section</label><input name="Section" class="form-control form-control-sm" placeholder="A" maxlength="3" required /></div>
+                            <div class="mb-3"><label class="form-label small">Capacity</label><input name="Capacity" type="number" class="form-control form-control-sm" value="40" /></div>
+                            <button type="submit" class="btn btn-dhs-primary btn-sm">Save Class</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Grades</h5></div>
+                    <div class="card-body p-0">
+                        <table class="table table-dhs table-sm mb-0">
+                            <thead><tr><th>Name</th><th>Level</th><th>Classes</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach (var g in grades)
+                            {
+                                var cnt = classes.Count(c => c.GradeId == g.Id);
+                                <tr>
+                                    <td>@g.Name</td><td>@g.Level</td><td>@cnt</td>
+                                    <td>
+                                        <form asp-action="DeleteGrade" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@g.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0"
+                                                    data-confirm="Delete grade @g.Name?">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card mt-3">
+                    <div class="card-header"><h5 class="mb-0">Classes</h5></div>
+                    <div class="card-body p-0">
+                        <table class="table table-dhs table-sm mb-0">
+                            <thead><tr><th>Class</th><th>Cap.</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach (var c in classes)
+                            {
+                                <tr>
+                                    <td>@c.DisplayName</td><td>@c.Capacity</td>
+                                    <td>
+                                        <form asp-action="DeleteClass" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@c.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0" data-confirm="Delete @c.DisplayName?">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SUBJECTS ────────────────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-subjects">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Add Subject</h5></div>
+                    <div class="card-body">
+                        <form asp-action="SaveSubject" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-2"><label class="form-label small">Name</label><input name="Name" class="form-control form-control-sm" placeholder="Mathematics" required /></div>
+                            <div class="mb-3"><label class="form-label small">Code</label><input name="Code" class="form-control form-control-sm" placeholder="MATH" maxlength="10" required /></div>
+                            <button type="submit" class="btn btn-dhs-primary btn-sm">Save Subject</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body p-0">
+                        <table class="table table-dhs table-sm mb-0">
+                            <thead><tr><th>Name</th><th>Code</th><th>Status</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach (var s in subjects)
+                            {
+                                <tr>
+                                    <td>@s.Name</td>
+                                    <td><code>@s.Code</code></td>
+                                    <td><span class="badge @(s.IsActive ? "badge-approved" : "badge-rejected") rounded-pill">@(s.IsActive ? "Active" : "Inactive")</span></td>
+                                    <td>
+                                        <form asp-action="DeleteSubject" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@s.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0" data-confirm="Deactivate @s.Name?">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── EMPLOY STAFF (Teacher / Housemaster / Kitchen Staff) ───────────── -->
+    <div class="tab-pane fade" id="tab-employ">
+        <div class="row g-4">
+            <div class="col-md-5">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Employ Staff</h5></div>
+                    <div class="card-body">
+                        <form asp-action="EmployStaff" method="post">
+                            @Html.AntiForgeryToken()
+
+                            <div class="mb-3">
+                                <label class="form-label small d-block">Role</label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="Role" id="role-teacher" value="Teacher" checked />
+                                    <label class="btn btn-outline-secondary btn-sm" for="role-teacher">Teacher</label>
+
+                                    <input type="radio" class="btn-check" name="Role" id="role-housemaster" value="Housemaster" />
+                                    <label class="btn btn-outline-secondary btn-sm" for="role-housemaster">Housemaster</label>
+
+                                    <input type="radio" class="btn-check" name="Role" id="role-kitchenstaff" value="KitchenStaff" />
+                                    <label class="btn btn-outline-secondary btn-sm" for="role-kitchenstaff">Kitchen Staff</label>
+                                </div>
+                            </div>
+
+                            <h6 class="fw-bold small text-uppercase text-muted mt-3">Personal &amp; Contact Details</h6>
+                            <div class="mb-2"><label class="form-label small">First Name</label><input name="FirstName" class="form-control form-control-sm" required /></div>
+                            <div class="mb-2"><label class="form-label small">Last Name</label><input name="LastName" class="form-control form-control-sm" required /></div>
+                            <div class="mb-2">
+                                <label class="form-label small">Email</label>
+                                <input name="Email" type="email" class="form-control form-control-sm" required />
+                                <div class="form-text">Login credentials will be sent to this address.</div>
+                            </div>
+                            <div class="mb-3"><label class="form-label small">Phone</label><input name="Phone" class="form-control form-control-sm" /></div>
+
+                            <div id="employ-teacher-assignments">
+                                <label class="form-label small">Class &amp; Subject Assignments</label>
+                                <div id="employ-assignment-rows">
+                                    <div class="employ-assignment-row row g-2 mb-2 align-items-center">
+                                        <div class="col-5">
+                                            <select name="ClassIds" class="form-select form-select-sm">
+                                                <option value="">— Class —</option>
+                                                @foreach (var c in classes)
+                                                { <option value="@c.Id">@c.DisplayName</option> }
+                                            </select>
+                                        </div>
+                                        <div class="col-5">
+                                            <select name="SubjectIds" class="form-select form-select-sm">
+                                                <option value="">— Subject —</option>
+                                                @foreach (var s in subjects.Where(s => s.IsActive))
+                                                { <option value="@s.Id">@s.Name</option> }
+                                            </select>
+                                        </div>
+                                        <div class="col-2">
+                                            <button type="button" class="btn btn-outline-danger btn-sm w-100 remove-employ-row"><i class="bi bi-trash"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" id="add-employ-assignment" class="btn btn-outline-secondary btn-sm mt-1">
+                                    <i class="bi bi-plus me-1"></i>Add Another Class/Subject
+                                </button>
+                            </div>
+
+                            <div class="alert alert-info small mt-3 py-2 mb-2">
+                                <i class="bi bi-envelope me-1"></i>
+                                A login account will be created and a temporary password emailed to this address.
+                            </div>
+
+                            <button type="submit" class="btn btn-dhs-primary btn-sm mt-2">
+                                <i class="bi bi-person-plus me-1"></i>Employ &amp; Send Credentials
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Current Teachers</h5></div>
+                    <div class="card-body p-0">
+                        <table class="table table-dhs table-sm mb-0">
+                            <thead><tr><th>Name</th><th>Email</th><th>Subjects</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach (var t in teachers)
+                            {
+                                <tr>
+                                    <td>@t.FullName</td>
+                                    <td><small>@t.Email</small></td>
+                                    <td><small>@string.Join(", ", t.TeacherSubjects.Select(ts => ts.Subject?.Code ?? ""))</small></td>
+                                    <td>
+                                        <form asp-action="DeleteTeacher" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@t.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0" data-confirm="Remove @t.FullName?">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <p class="text-muted small mt-2">
+                    Manage existing Housemasters and Kitchen Staff from their own pages under
+                    <strong>Academics → Housemasters / Kitchen Staff</strong>.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── FEES ────────────────────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-fees">
+        <div class="row g-4">
+            <div class="col-md-5">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Add / Edit Fee</h5></div>
+                    <div class="card-body">
+                        <form asp-action="SaveFeeType" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-2"><label class="form-label small">Name</label><input name="Name" class="form-control form-control-sm" required /></div>
+                            <div class="mb-2">
+                                <label class="form-label small">Amount (ZAR)</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">R</span>
+                                    <input name="Amount" type="number" step="0.01" class="form-control" required />
+                                </div>
+                            </div>
+                            <div class="mb-3"><label class="form-label small">Description</label><input name="Description" class="form-control form-control-sm" /></div>
+                            <button type="submit" class="btn btn-dhs-primary btn-sm">Save</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-body p-0">
+                        <table class="table table-dhs table-sm mb-0">
+                            <thead><tr><th>Name</th><th>Amount</th><th>Description</th></tr></thead>
+                            <tbody>
+                            @foreach (var f in feeTypes)
+                            {
+                                <tr>
+                                    <td>@f.Name</td>
+                                    <td><strong class="text-success">R@(f.Amount.ToString("N2"))</strong></td>
+                                    <td><small class="text-muted">@f.Description</small></td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── EMAIL TEMPLATES ─────────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-emails">
+        @foreach (var tpl in templates)
+        {
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="mb-0"><code>@tpl.TemplateKey</code> — @tpl.Subject</h5></div>
+                <div class="card-body">
+                    <form asp-action="SaveEmailTemplate" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@tpl.Id" />
+                        <div class="mb-2">
+                            <label class="form-label small">Subject</label>
+                            <input name="subject" class="form-control form-control-sm" value="@tpl.Subject" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Body (HTML, supports <code>&#123;&#123;TokenName&#125;&#125;</code>)</label>
+                            <textarea name="body" class="form-control form-control-sm" rows="6">@tpl.Body</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-dhs-primary btn-sm">Save Template</button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ── BOARDING SETTINGS ───────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-boarding">
+        @{ var boardingSettings = ViewBag.BoardingSettings as BoardingSettings ?? new BoardingSettings(); }
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Meal Budget &amp; Capacity</h5></div>
+                    <div class="card-body">
+                        <form asp-action="SaveBoardingSettings" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-3">
+                                <label class="form-label small">Weekly Meal Budget (ZAR)</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">R</span>
+                                    <input name="WeeklyMealBudget" type="number" step="0.01" class="form-control" value="@boardingSettings.WeeklyMealBudget" required />
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small">Learners Eating Per Meal</label>
+                                <input name="ExpectedDinersPerMeal" type="number" min="1" max="5000" class="form-control form-control-sm" value="@boardingSettings.ExpectedDinersPerMeal" required />
+                                <div class="form-text">Used to estimate a meal plan's weekly cost: cost per serving × learners × meals, compared with the weekly budget.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small">Max Pre-Orders Per Meal</label>
+                                <input name="MaxPreOrdersPerMeal" type="number" class="form-control form-control-sm" value="@boardingSettings.MaxPreOrdersPerMeal" required />
+                            </div>
+
+                            <h6 class="fw-bold mt-4 mb-1">Kitchen Shift Times</h6>
+                            <p class="small text-muted">Used automatically for meal serving times and kitchen staff tasks — nobody has to enter times when planning or scheduling.</p>
+                            <table class="table table-sm align-middle mb-3">
+                                <thead><tr><th>Meal</th><th>Prep starts</th><th>Served at</th></tr></thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Breakfast</td>
+                                        <td><input name="BreakfastStart" type="time" class="form-control form-control-sm" value="@boardingSettings.BreakfastStart" required /></td>
+                                        <td><input name="BreakfastServe" type="time" class="form-control form-control-sm" value="@boardingSettings.BreakfastServe" required /></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Lunch</td>
+                                        <td><input name="LunchStart" type="time" class="form-control form-control-sm" value="@boardingSettings.LunchStart" required /></td>
+                                        <td><input name="LunchServe" type="time" class="form-control form-control-sm" value="@boardingSettings.LunchServe" required /></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Dinner</td>
+                                        <td><input name="DinnerStart" type="time" class="form-control form-control-sm" value="@boardingSettings.DinnerStart" required /></td>
+                                        <td><input name="DinnerServe" type="time" class="form-control form-control-sm" value="@boardingSettings.DinnerServe" required /></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <button type="submit" class="btn btn-dhs-primary btn-sm">Save</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+    // ── Activate the tab matching the URL hash (e.g. Settings#tab-employ) ─────
+    (function () {
+        if (!location.hash) return;
+        const trigger = document.querySelector(`#settingsTabs a[href="${location.hash}"]`);
+        if (trigger) new bootstrap.Tab(trigger).show();
+    })();
+
+    // ── Employ Staff: show class/subject assignments only for Teacher ─────────
+    (function () {
+        const teacherSection = document.getElementById('employ-teacher-assignments');
+        const roleRadios = document.querySelectorAll('input[name="Role"]');
+
+        function syncTeacherSection() {
+            const isTeacher = document.querySelector('input[name="Role"]:checked')?.value === 'Teacher';
+            teacherSection.style.display = isTeacher ? '' : 'none';
+            // Disabled fields are excluded from submission entirely, so a hidden
+            // dropdown left on its blank option can never be posted to the server.
+            teacherSection.querySelectorAll('select').forEach(s => s.disabled = !isTeacher);
+        }
+        roleRadios.forEach(r => r.addEventListener('change', syncTeacherSection));
+        syncTeacherSection();
+
+        const rowTemplate = document.querySelector('.employ-assignment-row').cloneNode(true);
+        document.getElementById('add-employ-assignment').addEventListener('click', function () {
+            const newRow = rowTemplate.cloneNode(true);
+            newRow.querySelectorAll('select').forEach(s => s.value = '');
+            document.getElementById('employ-assignment-rows').appendChild(newRow);
+        });
+        document.getElementById('employ-assignment-rows').addEventListener('click', function (e) {
+            if (e.target.closest('.remove-employ-row')) {
+                const rows = document.querySelectorAll('.employ-assignment-row');
+                if (rows.length > 1) e.target.closest('.employ-assignment-row').remove();
+            }
+        });
+    })();
+</script>
+}

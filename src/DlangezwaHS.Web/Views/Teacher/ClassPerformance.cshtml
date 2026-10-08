@@ -1,0 +1,96 @@
+@model ClassPerformanceViewModel
+@{ ViewData["Title"] = "Class Performance"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h2><i class="bi bi-bar-chart me-2"></i>Class Performance Report</h2>
+        <p>@Model.ClassName — @Model.SubjectName — @Model.Term</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        @foreach (var t in (string[])ViewBag.Terms)
+        {
+            <a asp-action="ClassPerformance"
+               asp-route-classId="@Model.ClassId"
+               asp-route-subjectId="@Model.SubjectId"
+               asp-route-term="@t"
+               class="btn btn-sm @(t == Model.Term ? "btn-dhs-primary" : "btn-outline-secondary")">@t</a>
+        }
+    </div>
+</div>
+
+<!-- Summary -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon navy"><i class="bi bi-people"></i></div>
+            <div><div class="stat-value">@Model.TotalLearners</div><div class="stat-label">Learners</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-bar-chart-line"></i></div>
+            <div><div class="stat-value">@Model.ClassAverage%</div><div class="stat-label">Class Average</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-check-circle"></i></div>
+            <div><div class="stat-value">@Model.PassCount</div><div class="stat-label">Passed</div></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon orange"><i class="bi bi-x-circle"></i></div>
+            <div><div class="stat-value">@Model.PassRate%</div><div class="stat-label">Pass Rate</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Table -->
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">Learner Performance</h5></div>
+    <div class="card-body p-0">
+        @if (!Model.Learners.Any())
+        {
+            <div class="p-4 text-center text-muted">No marks captured for this term yet.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-dhs table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Learner</th>
+                            @foreach (var a in Model.Assessments)
+                            {
+                                <th class="text-center small" title="@a.Date.ToString("dd MMM")">@a.Name<br/><span class="text-muted" style="font-size:.7rem;">@a.Type</span></th>
+                            }
+                            <th class="text-center">Avg</th>
+                            <th class="text-center">Grade</th>
+                            <th class="text-center">Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in Model.Learners)
+                    {
+                        <tr>
+                            <td><strong>@row.LearnerName</strong><br/><code class="small text-muted">@row.LearnerID</code></td>
+                            @foreach (var cell in row.Marks)
+                            {
+                                var css = cell.Grade switch { "A" or "B" => "text-success", "C" or "D" => "text-primary", "E" or "F" => "text-warning", _ when cell.Percentage.HasValue => "text-danger", _ => "text-muted" };
+                                <td class="text-center small @css">
+                                    @(cell.Percentage.HasValue ? $"{cell.Percentage}%" : "—")
+                                    <br/><span style="font-size:.7rem;">@cell.Grade</span>
+                                </td>
+                            }
+                            <td class="text-center fw-bold @(row.Average >= 40 ? "text-success" : "text-danger")">@row.Average%</td>
+                            <td class="text-center"><span class="badge rounded-pill badge-@(row.FinalGrade == "-" ? "pending" : row.IsPassed ? "approved" : "rejected")">@row.FinalGrade</span></td>
+                            <td class="text-center"><span class="badge rounded-pill @(row.IsPassed ? "badge-approved" : "badge-rejected")">@(row.IsPassed ? "Pass" : "Fail")</span></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

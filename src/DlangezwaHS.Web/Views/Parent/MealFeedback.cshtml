@@ -1,0 +1,85 @@
+@model MealFeedbackSubmitViewModel
+@{ ViewData["Title"] = "Rate This Meal"; }
+
+<style>
+    .mf-stars { display: flex; gap: .4rem; justify-content: center; }
+    .mf-star { font-size: 2.6rem; color: #e2e8f0; cursor: pointer; transition: transform .25s cubic-bezier(.34,1.56,.64,1), color .2s; background: none; border: 0; padding: 0; line-height: 1; }
+    .mf-star:hover, .mf-star.on { color: #f59e0b; }
+    .mf-star:hover { transform: scale(1.18) rotate(-6deg); }
+    .mf-star.pop { animation: mf-pop .4s cubic-bezier(.34,1.56,.64,1); }
+    @@keyframes mf-pop { 50% { transform: scale(1.35); } }
+    .mf-word { text-align: center; font-weight: 700; color: var(--dhs-navy); min-height: 1.5rem; margin-top: .4rem; }
+    .mf-choice input { position: absolute; opacity: 0; pointer-events: none; }
+    .mf-choice span { display: inline-flex; align-items: center; gap: .35rem; padding: .5rem 1rem; border-radius: 99px; border: 1.5px solid #e2e8f0; font-weight: 600; font-size: .88rem;
+        color: var(--dhs-navy); cursor: pointer; transition: all .2s; }
+    .mf-choice span:hover { border-color: var(--dhs-blue-dark); background: var(--dhs-light); }
+    .mf-choice input:checked + span { background: var(--dhs-navy); color: #fff; border-color: var(--dhs-navy); }
+    .mf-choice input:focus-visible + span { outline: 3px solid var(--dhs-blue); outline-offset: 2px; }
+</style>
+
+<div class="page-header k-header">
+    <h2><i class="bi bi-star me-2"></i>Rate This Meal</h2>
+    <p>Completely anonymous — no learner or account details are saved with your rating</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="k-card k-rise" style="--i:0">
+            <div class="text-center mb-3">
+                <span class="k-meal @Model.MealType.ToLowerInvariant()">@Model.MealType</span>
+                <h3 class="k-title mt-2" style="font-size:1.35rem">@Model.MenuDescription</h3>
+            </div>
+            <form asp-action="MealFeedback" method="post" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="MealPlanItemId" />
+                <input type="hidden" asp-for="MenuDescription" />
+                <input type="hidden" asp-for="MealType" />
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+                <div class="k-label text-center">How was it?</div>
+                <div class="mf-stars" role="radiogroup" aria-label="Rating">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        <label class="m-0">
+                            <input type="radio" name="Rating" value="@i" class="visually-hidden star-input" required />
+                            <span class="mf-star" data-value="@i" aria-hidden="true"><i class="bi bi-star-fill"></i></span>
+                            <span class="visually-hidden">@i star@(i == 1 ? "" : "s")</span>
+                        </label>
+                    }
+                </div>
+                <div class="mf-word" id="ratingWord" aria-live="polite"></div>
+
+                <div class="k-label text-center mt-4">Was the portion enough? <span class="text-lowercase fw-normal">(optional)</span></div>
+                <div class="d-flex gap-2 justify-content-center flex-wrap" role="radiogroup" aria-label="Portion size">
+                    <label class="mf-choice"><input type="radio" name="Portion" value="TooLittle" /><span>Too little</span></label>
+                    <label class="mf-choice"><input type="radio" name="Portion" value="JustRight" /><span>Just right</span></label>
+                    <label class="mf-choice"><input type="radio" name="Portion" value="TooMuch" /><span>Too much</span></label>
+                </div>
+
+                <div class="mt-4">
+                    <label asp-for="Comment" class="k-label">Anything else? <span class="text-lowercase fw-normal">(optional)</span></label>
+                    <textarea asp-for="Comment" class="form-control k-input" rows="3" placeholder="e.g. Loved the stew!"></textarea>
+                </div>
+
+                <button type="submit" class="k-btn k-btn-primary w-100 mt-4" data-busy-text="Sending…"><i class="bi bi-send"></i>Submit feedback</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const words = ['', 'Not good', 'Could be better', 'Okay', 'Good', 'Excellent!'];
+    const stars = document.querySelectorAll('.mf-star'), inputs = document.querySelectorAll('.star-input');
+    const paint = v => stars.forEach(s => s.classList.toggle('on', Number(s.dataset.value) <= v));
+    inputs.forEach((input, i) => input.addEventListener('change', () => {
+        paint(i + 1);
+        document.getElementById('ratingWord').textContent = words[i + 1];
+        const s = stars[i]; s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop');
+    }));
+    stars.forEach(s => {
+        s.addEventListener('mouseenter', () => paint(Number(s.dataset.value)));
+        s.addEventListener('mouseleave', () => paint(Number(document.querySelector('.star-input:checked')?.value || 0)));
+    });
+</script>
+}

@@ -1,0 +1,158 @@
+@model IList<DietaryProfileRow>
+@*
+    Dietary profiles overview shared by kitchen staff and housemasters:
+    top allergies / requirements charts, the latest profiles, and a CSV download by date.
+    Links use the current controller (both have DietaryProfileReview and DietaryProfilesCsv).
+*@
+@{
+    // Housemasters get the summaries and charts only (no profile list or export)
+    var summaryOnly = ViewData["SummaryOnly"] as bool? ?? false;
+    var items = Model.SelectMany(p => p.Items.Select(i => (Profile: p, Item: i))).ToList();
+    var allergyCount = items.Count(x => x.Item.Category == "Allergy");
+    var severeLearners = Model.Count(p => p.HasSevereAllergy);
+    var requirementCount = items.Count(x => x.Item.Category != "Allergy");
+    var latest = Model.OrderByDescending(p => p.SubmittedAt).ToList();
+    var today = DlangezwaHS.Web.Services.SchoolClock.Today;
+    string CategoryLabel(string c) => c switch { "DietaryRequirement" => "Dietary requirement", "MedicalRestriction" => "Medical", _ => c };
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-clipboard2-pulse me-2"></i>Dietary Profiles</h2>
+        <p>Allergies and dietary needs added by parents and learners — active as soon as they're saved</p>
+    </div>
+    @if (!summaryOnly)
+    {
+        <button type="button" class="k-btn k-btn-light" data-bs-toggle="modal" data-bs-target="#downloadModal"><i class="bi bi-download"></i>Download list</button>
+    }
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-people"></i>Active profiles</div><div class="k-stat-value">@Model.Count</div><div class="k-stat-note">learners with needs on file</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-exclamation-octagon"></i>Severe allergies</div><div class="k-stat-value">@severeLearners</div><div class="k-stat-note">learner(s) — meals blocked</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-shield-exclamation"></i>Allergies</div><div class="k-stat-value">@allergyCount</div><div class="k-stat-note">recorded across profiles</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat dinner"><div class="k-stat-label"><i class="bi bi-heart-pulse"></i>Requirements</div><div class="k-stat-value">@requirementCount</div><div class="k-stat-note">dietary, medical &amp; preferences</div></div></div>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="k-empty"><i class="bi bi-clipboard2-pulse"></i><strong>No active dietary profiles yet</strong><p>Profiles appear here as soon as a parent or learner saves one.</p></div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-6 k-rise" style="--i:4">
+            <div class="k-card h-100">
+                <div class="k-card-head">
+                    <div><h3 class="k-title">Top 5 allergies</h3><p class="k-sub">Learners per allergy · red part = severe or anaphylactic</p></div>
+                </div>
+                <div style="position:relative;height:240px"><canvas id="allergyChart" role="img" aria-label="Top five allergies"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-6 k-rise" style="--i:5">
+            <div class="k-card h-100">
+                <div class="k-card-head">
+                    <div><h3 class="k-title">Top 5 requirements</h3><p class="k-sub">Dietary, medical and preference needs</p></div>
+                </div>
+                <div style="position:relative;height:240px"><canvas id="requirementChart" role="img" aria-label="Top five dietary requirements"></canvas></div>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex justify-content-center mt-3 k-rise" style="--i:6">
+        <button type="button" class="k-btn k-btn-ghost" data-bs-toggle="collapse" data-bs-target="#allNeeds" aria-expanded="false" aria-controls="allNeeds" id="seeAllNeeds">
+            <i class="bi bi-bar-chart-line"></i><span>See all allergies &amp; requirements</span>
+        </button>
+    </div>
+    <div class="collapse" id="allNeeds">
+        <div class="k-card mt-3">
+            <div class="k-card-head"><div><h3 class="k-title">All allergies &amp; requirements</h3><p class="k-sub">Every item on an active profile, most common first</p></div></div>
+            <div id="allNeedsWrap" style="position:relative"><canvas id="allChart" role="img" aria-label="All allergies and requirements"></canvas></div>
+        </div>
+    </div>
+
+    if (!summaryOnly)
+    {
+    <div class="k-card mt-4 k-rise" style="--i:7">
+        <div class="k-card-head">
+            <div><h3 class="k-title">Recently added profiles</h3><p class="k-sub">Latest 10 first · search covers every active profile</p></div>
+            <div class="d-flex gap-2 flex-wrap">
+                <input type="search" id="profileSearch" class="form-control k-input" style="max-width:240px" placeholder="Search learner or allergy…" aria-label="Search profiles" />
+                <button type="button" class="k-btn k-btn-primary" data-bs-toggle="modal" data-bs-target="#downloadModal"><i class="bi bi-download"></i>Download list</button>
+            </div>
+        </div>
+        <div class="k-table-wrap">
+            <table class="k-table">
+                <thead><tr><th>Learner</th><th>Allergies &amp; requirements</th><th>Added</th><th></th></tr></thead>
+                <tbody id="profileList" data-more-list data-more-initial="10" data-more-step="5">
+                @foreach (var p in latest)
+                {
+                    <tr data-more-item data-search="@((p.LearnerName + " " + p.ParentName + " " + string.Join(" ", p.Items.Select(i => i.Name))).ToLowerInvariant())">
+                        <td>
+                            <div class="fw-bold" style="color:var(--dhs-navy)">@p.LearnerName</div>
+                            <div class="k-sub">@p.ParentName @if (p.SubmittedByLearner) { <span class="k-pill ms-1">by learner</span> }</div>
+                        </td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                @foreach (var i in p.Items)
+                                {
+                                    var severe = i.Severity is "Severe" or "Anaphylactic";
+                                    <span class="k-pill @(severe ? "danger" : i.Category == "Allergy" ? "warn" : "")" title="@CategoryLabel(i.Category)@(i.Severity is null ? "" : $" · {i.Severity}")">
+                                        @if (severe) { <i class="bi bi-exclamation-octagon-fill"></i> }@i.Name@(i.Severity is null || severe ? "" : $" · {i.Severity}")
+                                    </span>
+                                }
+                                @if (p.Documents.Any()) { <span class="k-pill"><i class="bi bi-paperclip"></i>@p.Documents.Count</span> }
+                            </div>
+                        </td>
+                        <td class="text-nowrap"><span class="k-sub">@p.SubmittedAt.AddHours(2).ToString("dd MMM yyyy")</span></td>
+                        <td class="text-end"><a asp-action="DietaryProfileReview" asp-route-id="@p.Id" class="k-btn k-btn-ghost k-btn-sm">View</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div class="k-sub text-center mt-3" id="noProfileMatch" hidden>No profiles match your search.</div>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="profileList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+    </div>
+    }
+}
+
+<!-- Download by date -->
+@if (!summaryOnly)
+{
+<div class="modal fade k-modal" id="downloadModal" tabindex="-1" aria-labelledby="downloadTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="get" asp-action="DietaryProfilesCsv" id="downloadForm">
+                <div class="k-modal-head">
+                    <span class="k-bubble b1"></span><span class="k-bubble b2"></span><span class="k-bubble b3"></span>
+                    <h5 id="downloadTitle">Download dietary profiles</h5>
+                    <p>Active profiles added between two dates, as a spreadsheet (CSV)</p>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="k-label" for="dlFrom">From</label>
+                            <input type="date" id="dlFrom" name="from" class="form-control k-input" value="@today.AddMonths(-3).ToString("yyyy-MM-dd")" max="@today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-6">
+                            <label class="k-label" for="dlTo">To</label>
+                            <input type="date" id="dlTo" name="to" class="form-control k-input" value="@today.ToString("yyyy-MM-dd")" max="@today.ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-3" role="group" aria-label="Quick ranges">
+                        <button type="button" class="k-btn k-btn-ghost k-btn-sm" data-range="7">Last 7 days</button>
+                        <button type="button" class="k-btn k-btn-ghost k-btn-sm" data-range="30">Last 30 days</button>
+                        <button type="button" class="k-btn k-btn-ghost k-btn-sm" data-range="all">Everything</button>
+                    </div>
+                    <div class="text-danger small mt-2" id="dlError" hidden>The "from" date must be on or before the "to" date.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="k-btn k-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="k-btn k-btn-primary"><i class="bi bi-download"></i>Download CSV</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+}

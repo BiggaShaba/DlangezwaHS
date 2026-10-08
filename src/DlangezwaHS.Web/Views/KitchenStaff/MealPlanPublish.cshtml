@@ -1,0 +1,110 @@
+@model MealPlanPublishViewModel
+@{ ViewData["Title"] = "Publish Meal Plan"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-send-check me-2"></i>Publish Meal Plan — Week of @Model.WeekStartDate.ToString("dd MMM yyyy")</h2>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card @(Model.IsOverBudget ? "border-danger border-2" : "")">
+            <div class="card-header @(Model.IsOverBudget ? "bg-danger text-white" : "")"><h5 class="mb-0">Budget Tracker</h5></div>
+            <div class="card-body">
+                @{
+                    var pct = Model.TotalBudget > 0 ? (double)(Model.EstimatedCost / Model.TotalBudget * 100) : 0;
+                    var over = Model.EstimatedCost > Model.TotalBudget;
+                }
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>Estimated: R@(Model.EstimatedCost.ToString("N2")) <span class="text-muted">(@Model.ExpectedDiners learners per meal)</span></span>
+                    <span>Budget: R@(Model.TotalBudget.ToString("N2"))</span>
+                </div>
+                <div class="progress" style="height:10px;">
+                    <div class="progress-bar @(over ? "bg-danger" : "bg-success")" style="width:@(Math.Min(pct,100))%"></div>
+                </div>
+                @if (over)
+                {
+                    <p class="text-danger fw-bold mt-2 mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Over budget by R@((Model.EstimatedCost - Model.TotalBudget).ToString("N2"))</p>
+                    <p class="text-danger small mb-0">The plan can't be published until the estimated cost is within the budget. <a asp-action="MealPlanCreate" asp-route-id="@Model.MealPlanId">Edit the plan</a>.</p>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Allergy Conflict Report</h5></div>
+            <div class="card-body">
+                @if (!Model.Conflicts.Any())
+                {
+                    <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>No allergy conflicts detected.</p>
+                }
+                else
+                {
+                    <p class="text-danger fw-bold">@Model.Conflicts.Count conflict(s) found:</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.MissingServings.Any())
+{
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Some serving times have no meal:</strong> @string.Join(", ", Model.MissingServings).
+        <a asp-action="MealPlanCreate" asp-route-id="@Model.MealPlanId" class="alert-link">Edit the plan</a> to add them before publishing.
+    </div>
+}
+
+@if (Model.Conflicts.Any())
+{
+    <div class="card mb-4">
+        <div class="card-body p-0">
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Day</th><th>Meal</th><th>Menu</th><th>Allergen</th><th>Severity</th><th>Affected Learners</th></tr></thead>
+                <tbody>
+                @foreach (var c in Model.Conflicts)
+                {
+                    <tr class="@(c.IsSevere ? "table-danger" : "table-warning")">
+                        <td>@c.DayLabel</td>
+                        <td>@c.MealType</td>
+                        <td>@c.MenuDescription</td>
+                        <td><span class="badge bg-danger">@c.AllergenMatched</span></td>
+                        <td>@c.Severity</td>
+                        <td>@string.Join(", ", c.AffectedLearners)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<form method="post" asp-action="PublishMealPlan">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="id" value="@Model.MealPlanId" />
+
+    @if (Model.Conflicts.Any())
+    {
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="conflictsAcknowledged" value="true" id="ack" required />
+            <label class="form-check-label" for="ack">I have reviewed all allergy conflicts</label>
+        </div>
+    }
+    else
+    {
+        <input type="hidden" name="conflictsAcknowledged" value="true" />
+    }
+
+    <button type="submit" class="btn btn-dhs-primary px-4" @(Model.CanPublish ? "" : "disabled")>
+        <i class="bi bi-send-check me-1"></i>@(Model.IsPublished ? "Already Published" : "Publish Meal Plan")
+    </button>
+    @if (!Model.IsPublished && !Model.CanPublish)
+    {
+        <a asp-action="MealPlanCreate" asp-route-id="@Model.MealPlanId" class="btn btn-outline-primary"><i class="bi bi-pencil me-1"></i>Edit Plan</a>
+    }
+    <a asp-action="MealPlan" class="btn btn-outline-secondary">Back</a>
+</form>

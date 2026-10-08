@@ -1,0 +1,114 @@
+@model AcademicReportFilterViewModel
+@{ ViewData["Title"] = "Academic Reports"; }
+
+<div class="page-header"><h2><i class="bi bi-file-earmark-bar-graph me-2"></i>Academic Reports</h2>
+    <p>Generate class performance summaries per term</p>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Report Parameters</h5></div>
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Class <span class="text-danger">*</span></label>
+                <select name="ClassId" class="form-select" required>
+                    <option value="">— Select Class —</option>
+                    @foreach (var c in Model.AllClasses)
+                    { <option value="@c.Id" selected="@(Model.ClassId == c.Id)">@c.DisplayName</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Subject <span class="text-danger">*</span></label>
+                <select name="SubjectId" class="form-select" required>
+                    <option value="">— Select Subject —</option>
+                    @foreach (var s in Model.AllSubjects)
+                    { <option value="@s.Id" selected="@(Model.SubjectId == s.Id)">@s.Name</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Term</label>
+                <select name="Term" class="form-select">
+                    @foreach (var t in new[]{"Term 1","Term 2","Term 3","Term 4"})
+                    { <option value="@t" selected="@(Model.Term == t)">@t</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-dhs-primary w-100">
+                    <i class="bi bi-search me-1"></i>Generate Report
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (Model.Report is not null)
+{
+    var r = Model.Report;
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">@r.ClassName — @r.SubjectName — @r.Term</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-4">
+                @foreach (var (label, val, css) in new[]{
+                    ($"{r.TotalLearners} Learners", "bi-people", "navy"),
+                    ($"{r.ClassAverage}% Average", "bi-bar-chart-line", "blue"),
+                    ($"{r.PassCount} Passed", "bi-check-circle", "green"),
+                    ($"{r.PassRate}% Pass Rate", "bi-percent", "orange")
+                })
+                {
+                    <div class="col-6 col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-icon @css"><i class="bi @val"></i></div>
+                            <div><div class="stat-value small fw-bold">@label</div></div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-dhs table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Learner</th>
+                            @foreach (var a in r.Assessments)
+                            { <th class="text-center small">@a.Name</th> }
+                            <th class="text-center">Average</th>
+                            <th class="text-center">Grade</th>
+                            <th class="text-center">Result</th>
+                            <th class="text-center">Edit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in r.Learners)
+                    {
+                        <tr>
+                            <td><strong>@row.LearnerName</strong><br/><code class="small text-muted">@row.LearnerID</code></td>
+                            @foreach (var cell in row.Marks)
+                            {
+                                <td class="text-center small @(cell.Percentage.HasValue && cell.Percentage < 40 ? "text-danger" : "")">
+                                    @(cell.Percentage.HasValue ? $"{cell.Percentage}%" : "—")
+                                </td>
+                            }
+                            <td class="text-center fw-bold @(row.Average >= 40 ? "text-success" : "text-danger")">@row.Average%</td>
+                            <td class="text-center"><span class="badge rounded-pill @(row.IsPassed ? "badge-approved" : "badge-rejected")">@row.FinalGrade</span></td>
+                            <td class="text-center"><span class="badge rounded-pill @(row.IsPassed ? "badge-approved" : "badge-rejected")">@(row.IsPassed ? "Pass" : "Fail")</span></td>
+                            <td class="text-center">
+                                <a asp-action="EditMark"
+                                   asp-route-classId="@r.ClassId"
+                                   asp-route-subjectId="@r.SubjectId"
+                                   asp-route-term="@r.Term"
+                                   asp-route-learnerName="@row.LearnerName"
+                                   class="btn btn-sm btn-outline-warning" title="Edit marks">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}

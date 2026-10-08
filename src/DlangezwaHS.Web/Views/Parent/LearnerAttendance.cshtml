@@ -1,0 +1,108 @@
+@model LearnerAttendanceViewModel
+@{
+    ViewData["Title"] = $"Attendance — {Model.LearnerName}";
+    var pct = Model.AttendancePct;
+    var weeks = Model.Records.GroupBy(r => r.Date.Date.AddDays(-(((int)r.Date.DayOfWeek + 6) % 7))).OrderByDescending(g => g.Key).ToList();
+}
+
+<style>
+    .la-ring { width: 130px; height: 130px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto;
+        background: conic-gradient(var(--ring) calc(var(--p, 0) * 1%), #e2e8f0 0); transition: --p 1.4s cubic-bezier(.16,1,.3,1); }
+    .la-ring > div { width: 100px; height: 100px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-size: 1.6rem; font-weight: 800; color: var(--dhs-navy); }
+    @@property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
+    .la-week { display: grid; grid-template-columns: repeat(5, 1fr); gap: .4rem; }
+    .la-day { border-radius: 12px; padding: .5rem .3rem; text-align: center; font-size: .72rem; font-weight: 700; transition: transform .25s var(--ease-spring); }
+    .la-day:hover { transform: translateY(-3px); }
+    .la-day b { display: block; font-size: 1rem; }
+    .la-day.Present { background: #dcfce7; color: #166534; } .la-day.Absent { background: #fee2e2; color: #b91c1c; } .la-day.Late { background: #fef3c7; color: #92400e; }
+    .la-day.none { background: #f8fafc; color: #cbd5e1; }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-calendar-check me-2"></i>Attendance History</h2>
+        <p>@Model.LearnerName · @Model.ClassName · @Model.FromDate.ToString("dd MMM") – @Model.ToDate.ToString("dd MMM yyyy")</p>
+    </div>
+    <a asp-action="LearnerOverview" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Back</a>
+</div>
+
+<form method="get" class="k-card mb-4 k-rise" style="--i:0" data-busy>
+    <input type="hidden" name="learnerId" value="@Model.LearnerId" />
+    <div class="row g-3 align-items-end">
+        <div class="col-sm-4 col-lg-3"><label class="k-label" for="from">From</label><input type="date" id="from" name="from" value="@Model.FromDate.ToString("yyyy-MM-dd")" class="form-control k-input" /></div>
+        <div class="col-sm-4 col-lg-3"><label class="k-label" for="to">To</label><input type="date" id="to" name="to" value="@Model.ToDate.ToString("yyyy-MM-dd")" class="form-control k-input" max="@DateTime.Today.ToString("yyyy-MM-dd")" /></div>
+        <div class="col-sm-4 col-lg-6 d-flex gap-2">
+            <button type="submit" class="k-btn k-btn-primary" data-busy-text="Loading…"><i class="bi bi-search"></i>Show</button>
+            <a asp-action="LearnerAttendance" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-ghost">Last 30 days</a>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4 k-rise" style="--i:1">
+        <div class="k-card h-100 text-center">
+            <div class="k-label">Attendance rate</div>
+            <div class="la-ring" data-ring="@pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)" style="--ring:@(pct >= 80 ? "#10b981" : pct >= 60 ? "#f59e0b" : "#dc2626")"><div>@(Model.TotalDays > 0 ? $"{pct:0}%" : "—")</div></div>
+            <div class="k-sub mt-2">@Model.PresentDays of @Model.TotalDays day(s) present</div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="row g-3 h-100">
+            <div class="col-4 k-rise" style="--i:2"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check-circle"></i>Present</div><div class="k-stat-value" data-count="@Model.PresentDays">@Model.PresentDays</div></div></div>
+            <div class="col-4 k-rise" style="--i:3"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-x-circle"></i>Absent</div><div class="k-stat-value" data-count="@Model.AbsentDays">@Model.AbsentDays</div></div></div>
+            <div class="col-4 k-rise" style="--i:4"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-clock"></i>Late</div><div class="k-stat-value" data-count="@Model.LateDays">@Model.LateDays</div></div></div>
+            @if (Model.TotalDays > 0 && pct < 80)
+            {
+                <div class="col-12"><div class="alert @(pct < 60 ? "alert-danger" : "alert-warning") py-2 small mb-0" style="border-radius:14px"><i class="bi bi-exclamation-triangle me-1"></i>@(pct < 60 ? "Attendance is critically low. Please contact the school." : "Attendance is below the required 80%.")</div></div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="k-section k-rise" style="--i:5">By week</div>
+@if (!weeks.Any())
+{
+    <div class="k-empty"><i class="bi bi-calendar-x"></i><strong>No records for this period</strong><p>Choose different dates above.</p></div>
+}
+<div id="weekList" data-more-list data-more-initial="4" data-more-step="4">
+    @foreach (var (wk, idx) in weeks.Select((w, i) => (w, i)))
+    {
+        var id = $"wk-{wk.Key:yyyyMMdd}";
+        var present = wk.Count(r => r.Status == "Present");
+        <div class="k-acc" data-more-item>
+            <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="@(idx == 0 ? "true" : "false")" aria-controls="@id">
+                <span class="k-date" aria-hidden="true"><span><b>@wk.Key.Day</b>@wk.Key.ToString("MMM")</span></span>
+                <span class="flex-grow-1">
+                    <span class="k-acc-title d-block">Week of @wk.Key.ToString("dd MMM")</span>
+                    <span class="k-acc-meta">@present present @if (wk.Any(r => r.Status == "Absent")) { <span class="k-pill danger">@wk.Count(r => r.Status == "Absent") absent</span> } @if (wk.Any(r => r.Status == "Late")) { <span class="k-pill warn">@wk.Count(r => r.Status == "Late") late</span> }</span>
+                </span>
+                <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="collapse @(idx == 0 ? "show" : "")" id="@id">
+                <div class="k-acc-body">
+                    <div class="la-week">
+                        @for (var d = 0; d < 5; d++)
+                        {
+                            var date = wk.Key.AddDays(d);
+                            var rec = wk.FirstOrDefault(r => r.Date.Date == date);
+                            <div class="la-day @(rec?.Status ?? "none")" title="@date.ToString("dddd dd MMM")@(rec is null ? " — no record" : $" — {rec.Status}{(string.IsNullOrEmpty(rec.Notes) ? "" : $" ({rec.Notes})")}")">
+                                @date.ToString("ddd")<b>@date.Day</b>@(rec?.Status ?? "—")
+                            </div>
+                        }
+                    </div>
+                    @foreach (var r in wk.Where(r => !string.IsNullOrEmpty(r.Notes)))
+                    {
+                        <div class="k-sub mt-2"><i class="bi bi-chat-left-text me-1"></i>@r.Date.ToString("ddd dd MMM"): @r.Notes</div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+<div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="weekList"><i class="bi bi-chevron-down"></i>See <span data-more-count>4</span> more weeks</button></div>
+
+@section Scripts {
+<script>
+    document.querySelectorAll('[data-ring]').forEach(r => requestAnimationFrame(() => requestAnimationFrame(() => r.style.setProperty('--p', r.dataset.ring))));
+</script>
+}

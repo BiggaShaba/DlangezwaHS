@@ -1,0 +1,72 @@
+@model MealPlanSummaryRow
+@*
+    One week on the Meal Plans screen: a summary line that opens to show its figures and actions.
+    ViewData: "Order" (entrance-animation position), "Open" (start expanded).
+*@
+@{
+    var order = ViewData["Order"] as int? ?? 0;
+    var open = ViewData["Open"] as bool? ?? false;
+    var bodyId = $"week-{Model.Id}";
+    var over = Model.EstimatedCost > Model.TotalBudget;
+    var pct = Model.TotalBudget > 0 ? Math.Min(100, (double)(Model.EstimatedCost / Model.TotalBudget * 100)) : (Model.EstimatedCost > 0 ? 100 : 0);
+    var relationBadge = Model.WeekRelation switch
+    {
+        "This week" => "bg-primary", "Next week" => "bg-info text-dark", "Past" => "bg-light text-muted border", _ => "bg-light text-dark border"
+    };
+    var statusBadge = Model.Status == "Published" ? "badge-approved" : "badge-pending";
+}
+
+<div class="mp-week mp-rise @(Model.IsPast ? "is-past" : "") @(Model.WeekRelation == "This week" ? "is-current" : "")"
+     style="--i:@order" data-plan-id="@Model.Id">
+    <button class="mp-week-head" type="button" data-bs-toggle="collapse" data-bs-target="#@bodyId"
+            aria-expanded="@(open ? "true" : "false")" aria-controls="@bodyId">
+        <span class="mp-date" aria-hidden="true"><span><b>@Model.WeekStartDate.Day</b>@Model.WeekStartDate.ToString("MMM")</span></span>
+        <span class="flex-grow-1 min-w-0">
+            <span class="mp-title d-block">
+                Week of @Model.WeekStartDate.ToString("dd MMM") – @Model.WeekStartDate.AddDays(6).ToString("dd MMM yyyy")
+            </span>
+            <span class="mp-meta d-flex flex-wrap align-items-center gap-1 mt-1">
+                <span class="badge @relationBadge">@Model.WeekRelation</span>
+                <span class="badge @statusBadge rounded-pill">@Model.Status</span>
+                <span class="ms-1">@Model.ItemCount meal option(s)</span>
+                @if (Model.DuplicateOfPlanIds.Any())
+                {
+                    <span class="badge bg-warning text-dark ms-1" title="Another plan covers some of the same days"><i class="bi bi-exclamation-triangle me-1"></i>Duplicate week</span>
+                }
+            </span>
+        </span>
+        <span class="mp-meter" aria-hidden="true">
+            <span class="d-flex justify-content-between"><small>Estimate</small><small class="@(over ? "text-danger fw-bold" : "")">@pct.ToString("0")%</small></span>
+            <span class="bar d-block"><span class="fill d-block @(over ? "over" : "")" data-pct="@pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)"></span></span>
+        </span>
+        <i class="bi bi-chevron-down mp-chevron" aria-hidden="true"></i>
+    </button>
+
+    <div class="collapse @(open ? "show" : "")" id="@bodyId">
+        <div class="mp-week-body">
+            <div class="mp-figures">
+                <div><span>Budget</span><strong>R@(Model.TotalBudget.ToString("N2"))</strong></div>
+                <div><span>Estimated cost</span><strong class="@(over ? "text-danger" : "")">R@(Model.EstimatedCost.ToString("N2"))</strong></div>
+                <div>
+                    <span>@(over ? "Over budget by" : "Remaining")</span>
+                    <strong class="@(over ? "text-danger" : "")">R@(Math.Abs(Model.TotalBudget - Model.EstimatedCost).ToString("N2"))</strong>
+                </div>
+                <div><span>Meal options</span><strong>@Model.ItemCount</strong></div>
+            </div>
+            <div class="mp-actions d-flex flex-wrap gap-2">
+                @if (Model.IsPast)
+                {
+                    <a asp-action="MealPlanCreate" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye me-1"></i>View Options</a>
+                    <a asp-action="MealPlanPublish" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-secondary"><i class="bi bi-shield-exclamation me-1"></i>Allergy Report</a>
+                }
+                else
+                {
+                    <a asp-action="MealPlanCreate" asp-route-id="@Model.Id" class="btn btn-sm btn-dhs-primary"><i class="bi bi-pencil-square me-1"></i>Add / Edit Options</a>
+                    <a asp-action="MealPlanPublish" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-shield-exclamation me-1"></i>@(Model.Status == "Published" ? "Allergy Report" : "Allergy Report & Publish")
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+</div>

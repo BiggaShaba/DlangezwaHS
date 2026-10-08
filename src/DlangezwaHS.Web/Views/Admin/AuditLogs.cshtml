@@ -1,0 +1,43 @@
+@model List<AuditLog>
+@{ ViewData["Title"] = "Audit Logs"; }
+
+<div class="page-header"><h2><i class="bi bi-clock-history me-2"></i>Audit Logs</h2>
+    <p>All system activity — Page @ViewBag.Page of @ViewBag.Pages (@ViewBag.Total total entries)</p>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dhs table-sm mb-0">
+                <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th><th>IP</th></tr></thead>
+                <tbody>
+                @foreach (var log in Model)
+                {
+                    <tr>
+                        <td><small>@log.Timestamp.ToString("dd MMM yyyy HH:mm:ss")</small></td>
+                        <td><small>@(log.UserName ?? log.UserId ?? "—")</small></td>
+                        <td><code class="small">@log.Action</code></td>
+                        <td><small class="text-muted">@log.EntityType #@log.EntityId</small></td>
+                        <td><small>@log.Details</small></td>
+                        <td><small class="text-muted">@log.IpAddress</small></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if ((int)ViewBag.Pages > 1)
+{
+    <nav class="mt-3">
+        <ul class="pagination justify-content-center">
+            @for (int i = 1; i <= (int)ViewBag.Pages; i++)
+            {
+                <li class="page-item @(i == (int)ViewBag.Page ? "active" : "")">
+                    <a class="page-link" asp-action="AuditLogs" asp-route-page="@i">@i</a>
+                </li>
+            }
+        </ul>
+    </nav>
+}

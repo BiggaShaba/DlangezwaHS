@@ -1,0 +1,335 @@
+@model IList<MealPlanSummaryRow>
+@{
+    ViewData["Title"] = "Meal Plans";
+
+    // Current + upcoming weeks (soonest first), then the 4 most recent past weeks; older ones fold away
+    var current = Model.Where(p => !p.IsPast).OrderBy(p => p.WeekStartDate).ToList();
+    var past = Model.Where(p => p.IsPast).OrderByDescending(p => p.WeekStartDate).ToList();
+    var recentPast = past.Take(4).ToList();
+    var olderPast = past.Skip(4).ToList();
+
+    // The chart covers the weeks shown above the fold, oldest → newest
+    var chartWeeks = recentPast.Concat(current).OrderBy(p => p.WeekStartDate).ToList();
+    var camel = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+    var chartJson = System.Text.Json.JsonSerializer.Serialize(chartWeeks.Select(p => new
+    {
+        id = p.Id,
+        label = p.WeekStartDate.ToString("dd MMM"),
+        range = $"{p.WeekStartDate:dd MMM} – {p.WeekStartDate.AddDays(6):dd MMM yyyy}",
+        relation = p.WeekRelation,
+        budget = p.TotalBudget,
+        estimate = p.EstimatedCost,
+        meals = p.ItemCount
+    }), camel);
+
+    var thisWeek = current.FirstOrDefault(p => p.WeekRelation == "This week");
+    var upcoming = current.Where(p => p != thisWeek).ToList();
+    var thisMonday = DlangezwaHS.Web.Services.SchoolClock.WeekStart(DlangezwaHS.Web.Services.SchoolClock.Today);
+    var overBudgetCount = chartWeeks.Count(p => p.EstimatedCost > p.TotalBudget);
+    var duplicates = Model.Where(p => p.DuplicateOfPlanIds.Any()).ToList();
+}
+
+<style>
+    .mp-rise { opacity: 0; transform: translateY(14px); animation: mp-rise .6s var(--ease-spring) forwards; animation-delay: calc(var(--i, 0) * 70ms); }
+    @@keyframes mp-rise { to { opacity: 1; transform: none; } }
+
+    /* ── Header: navy → blue gradient with a soft glow; light outline button on the dark background ── */
+    .mp-header { background: linear-gradient(120deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 55%, var(--dhs-blue-dark) 100%); }
+    .mp-header::after { content: ""; position: absolute; width: 360px; height: 360px; right: -90px; top: -190px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(151,200,233,.45), transparent 70%); pointer-events: none; animation: mp-glow 10s ease-in-out infinite; }
+    @@keyframes mp-glow { 50% { transform: translate(-30px, 20px) scale(1.1); } }
+    .mp-header > * { position: relative; z-index: 1; }
+    .mp-btn-light { color: #fff; border: 1.5px solid rgba(255,255,255,.55); background: rgba(255,255,255,.08); border-radius: 9px; padding: .5rem 1.2rem; backdrop-filter: blur(4px); }
+    .mp-btn-light:hover, .mp-btn-light:focus-visible { color: var(--dhs-navy); background: #fff; border-color: #fff; transform: translateY(-1px); }
+
+    .mp-empty-week { border-radius: 18px; border: 1.5px dashed var(--dhs-blue); background: var(--dhs-light); padding: 1rem 1.2rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+    /* ── Chart card ── */
+    .mp-chart-card { border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1.4rem 1.4rem 1rem; }
+    .mp-chart-card h5 { color: var(--dhs-navy); font-weight: 700; margin: 0; }
+    .mp-hint { color: var(--dhs-grey); font-size: .85rem; }
+    .mp-canvas { position: relative; height: 320px; }
+    .mp-stats { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .mp-stat { padding: .45rem .85rem; border-radius: 14px; background: var(--dhs-light); color: var(--dhs-navy); font-size: .82rem; line-height: 1.25; }
+    .mp-stat strong { display: block; font-size: 1.05rem; }
+    .mp-stat.alert-stat { background: #fef2f2; color: #b91c1c; }
+
+    /* ── Week list ── */
+    .mp-section-title { text-transform: uppercase; letter-spacing: .08em; font-size: .78rem; font-weight: 700; color: var(--dhs-grey); margin: 1.6rem 0 .75rem; }
+    .mp-week { border-radius: 18px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); margin-bottom: .65rem; overflow: hidden;
+        transition: transform .3s var(--ease-spring), box-shadow .3s var(--ease-spring), border-color .2s; }
+    .mp-week:hover, .mp-week.is-linked { transform: translateY(-3px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    .mp-week.is-current { border-left: 4px solid var(--dhs-blue-dark); }
+    .mp-week-head { width: 100%; display: flex; align-items: center; gap: 1rem; padding: .85rem 1.1rem; border: 0; background: none; text-align: left; color: inherit; }
+    .mp-week-head:focus-visible { outline: 3px solid var(--dhs-blue); outline-offset: -3px; border-radius: 18px; }
+    .mp-date { width: 54px; height: 54px; flex-shrink: 0; border-radius: 14px; display: grid; place-items: center; text-align: center; line-height: 1;
+        background: linear-gradient(145deg, var(--dhs-navy-mid), var(--dhs-navy)); color: #fff; }
+    .mp-date b { font-size: 1.25rem; display: block; }
+    .mp-date span { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dhs-blue); }
+    .is-past .mp-date { background: #e2e8f0; color: var(--dhs-navy); }
+    .is-past .mp-date span { color: var(--dhs-grey); }
+    .mp-title { font-weight: 700; color: var(--dhs-navy); }
+    .mp-meta { font-size: .82rem; color: var(--dhs-grey); }
+    .mp-meter { width: 140px; flex-shrink: 0; }
+    .mp-meter .bar { height: 7px; border-radius: 99px; background: #e2e8f0; overflow: hidden; }
+    .mp-meter .fill { height: 100%; border-radius: 99px; width: 0; background: linear-gradient(90deg, var(--dhs-blue), var(--dhs-blue-dark));
+        transition: width 1.6s cubic-bezier(.16,1,.3,1); }
+    .mp-meter .fill.over { background: linear-gradient(90deg, #f87171, #dc2626); }
+    .mp-meter small { color: var(--dhs-grey); font-size: .72rem; }
+    .mp-chevron { color: var(--dhs-grey); transition: transform .35s var(--ease-spring); }
+    .mp-week-head[aria-expanded="true"] .mp-chevron { transform: rotate(180deg); }
+    .mp-week-body { padding: 0 1.1rem 1.1rem calc(54px + 2.1rem); }
+    .mp-figures { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: .9rem; font-size: .85rem; }
+    .mp-figures div span { display: block; color: var(--dhs-grey); font-size: .75rem; }
+    .mp-figures div strong { color: var(--dhs-navy); }
+    .mp-actions .btn { border-radius: 12px; padding: .5rem 1rem; }
+    .mp-actions .btn:hover { transform: translateY(-2px); }
+    .mp-more { border: 0; background: none; color: var(--dhs-navy-mid); font-weight: 600; font-size: .9rem; padding: .4rem 0; }
+    .mp-more i { transition: transform .3s var(--ease-spring); display: inline-block; }
+    .mp-more[aria-expanded="true"] i { transform: rotate(180deg); }
+
+    @@media (max-width: 767.98px) {
+        .mp-meter { display: none; }
+        .mp-week-body { padding-left: 1.1rem; }
+    }
+    @@media (prefers-reduced-motion: reduce) {
+        .mp-rise { animation: none; opacity: 1; transform: none; }
+        .mp-week, .mp-chevron, .mp-more i, .mp-meter .fill { transition: none; }
+        .mp-header::after { animation: none; }
+    }
+</style>
+
+<div class="page-header mp-header d-flex justify-content-between align-items-center flex-wrap gap-2 mp-rise" style="--i:0">
+    <div>
+        <h2><i class="bi bi-calendar3 me-2"></i>Weekly Meal Plans</h2>
+        <p>One plan per week (Monday–Sunday). A week that already has a plan can only be edited, so learners never see duplicate options.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Meals" class="btn mp-btn-light"><i class="bi bi-journal-richtext me-1"></i>Meal Library</a>
+        <a asp-action="MealPlanCreate" class="btn btn-dhs-secondary"><i class="bi bi-plus-circle me-1"></i>Plan a Week</a>
+    </div>
+</div>
+
+@if (duplicates.Any())
+{
+    <div class="alert alert-warning mp-rise" style="--i:1">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Some weeks have more than one plan</strong> — learners see the options from both when pre-ordering.
+        Remove the extra options from one plan, or keep using only one of them:
+        @string.Join("; ", duplicates.GroupBy(d => d.WeekStartDate.Date.AddDays(-(((int)d.WeekStartDate.DayOfWeek + 6) % 7)))
+            .Select(g => $"week of {g.Key:dd MMM yyyy}"))
+    </div>
+}
+
+@if (!Model.Any())
+{
+    <div class="mp-chart-card text-center py-5 text-muted mp-rise" style="--i:1">
+        <i class="bi bi-calendar-plus fs-1 d-block mb-2" style="color:var(--dhs-blue-dark)"></i>
+        No meal plans yet. Use <strong>Plan a Week</strong> to create the first one.
+    </div>
+}
+else
+{
+    <div class="mp-section-title mp-rise mt-0" style="--i:1">This week</div>
+    @if (thisWeek is not null)
+    {
+        <partial name="_MealPlanWeekRow" model="thisWeek" view-data='new ViewDataDictionary(ViewData) { ["Order"] = 1, ["Open"] = true }' />
+    }
+    else
+    {
+        <div class="mp-empty-week mp-rise" style="--i:1">
+            <i class="bi bi-calendar-x fs-3" style="color:var(--dhs-blue-dark)" aria-hidden="true"></i>
+            <div class="flex-grow-1"><strong style="color:var(--dhs-navy)">No meal plan for this week yet</strong>
+                <div class="mp-hint">Week of @thisMonday.ToString("dd MMM") – @thisMonday.AddDays(6).ToString("dd MMM yyyy")</div></div>
+            <a asp-action="MealPlanCreate" asp-route-week="@thisMonday.ToString("yyyy-MM-dd")" class="btn btn-sm btn-dhs-primary"><i class="bi bi-plus-circle me-1"></i>Plan this week</a>
+        </div>
+    }
+
+    <div class="mp-chart-card mp-rise mt-4" style="--i:2">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+            <div>
+                <h5>Budget vs estimated cost</h5>
+                <div class="mp-hint">Estimated cost = cost per serving × learners eating each meal (set by the admin). The line shows how many meal options each week has. Hover a week for details.</div>
+            </div>
+            <div class="mp-stats">
+                @if (thisWeek is not null)
+                {
+                    <div class="mp-stat"><strong>R@(thisWeek.EstimatedCost.ToString("N0"))</strong>this week's estimate</div>
+                }
+                <div class="mp-stat"><strong>@current.Count of 8</strong>upcoming weeks planned</div>
+                @if (overBudgetCount > 0)
+                {
+                    <div class="mp-stat alert-stat"><strong>@overBudgetCount</strong>over budget</div>
+                }
+            </div>
+        </div>
+        <div class="mp-canvas"><canvas id="budgetChart" role="img" aria-label="Chart of weekly budget, estimated cost and number of meal options"></canvas></div>
+    </div>
+
+    <div class="mp-section-title mp-rise" style="--i:3">Upcoming weeks</div>
+    @if (!upcoming.Any())
+    {
+        <div class="text-muted small mb-2">No upcoming weeks planned yet — use <strong>Plan a Week</strong>.</div>
+    }
+    @for (var i = 0; i < upcoming.Count; i++)
+    {
+        <partial name="_MealPlanWeekRow" model="upcoming[i]" view-data='new ViewDataDictionary(ViewData) { ["Order"] = i + 4 }' />
+    }
+
+    @if (recentPast.Any())
+    {
+        <div class="mp-section-title mp-rise" style="--i:@(upcoming.Count + 4)">Past weeks</div>
+        @for (var i = 0; i < recentPast.Count; i++)
+        {
+            <partial name="_MealPlanWeekRow" model="recentPast[i]" view-data='new ViewDataDictionary(ViewData) { ["Order"] = upcoming.Count + 5 + i }' />
+        }
+    }
+    @if (olderPast.Any())
+    {
+        <button class="mp-more" type="button" data-bs-toggle="collapse" data-bs-target="#olderWeeks" aria-expanded="false" aria-controls="olderWeeks">
+            <i class="bi bi-chevron-down me-1"></i>Show @olderPast.Count older week(s)
+        </button>
+        <div class="collapse mt-2" id="olderWeeks">
+            @foreach (var p in olderPast)
+            {
+                <partial name="_MealPlanWeekRow" model="p" view-data='new ViewDataDictionary(ViewData) { ["Order"] = 0 }' />
+            }
+        </div>
+    }
+}
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Budget meters in each row slide to their value once the page has painted
+    requestAnimationFrame(() => requestAnimationFrame(() =>
+        document.querySelectorAll('.mp-meter .fill').forEach(el => el.style.width = el.dataset.pct + '%')));
+
+    const el = document.getElementById('budgetChart');
+    if (!el || typeof Chart === 'undefined') return;
+    const weeks = @Html.Raw(chartJson);
+    if (!weeks.length) return;
+
+    const NAVY = '#0B2A4A', NAVY_MID = '#1a4a7a', BLUE = '#97C8E9', BLUE_DARK = '#5ea8d3', GREY = '#6B7280';
+    const rand = n => 'R' + Number(n).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const vGradient = (chart, top, bottom) => {
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return top;
+        const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        g.addColorStop(0, top); g.addColorStop(1, bottom);
+        return g;
+    };
+
+    // Soft band behind the current week
+    const currentBand = {
+        id: 'currentBand',
+        beforeDatasetsDraw(chart) {
+            const i = weeks.findIndex(w => w.relation === 'This week');
+            if (i < 0) return;
+            const { ctx, chartArea, scales: { x } } = chart;
+            const half = (x.getPixelForValue(1) - x.getPixelForValue(0)) / 2 || 30;
+            ctx.save();
+            ctx.fillStyle = 'rgba(151,200,233,.18)';
+            ctx.fillRect(x.getPixelForValue(i) - half, chartArea.top, half * 2, chartArea.bottom - chartArea.top);
+            ctx.restore();
+        }
+    };
+
+    // Bars and the line start at zero and slowly climb to their values after load
+    const climb = reduce ? 0 : 2200;
+    const delay = ctx => ctx.type === 'data' && ctx.mode === 'default' ? ctx.dataIndex * 120 + ctx.datasetIndex * 180 : 0;
+
+    const chart = new Chart(el, {
+        data: {
+            labels: weeks.map(w => w.label),
+            datasets: [
+                {
+                    type: 'bar', label: 'Weekly budget', data: weeks.map(w => w.budget), yAxisID: 'y',
+                    backgroundColor: c => vGradient(c.chart, BLUE, 'rgba(151,200,233,.35)'),
+                    hoverBackgroundColor: BLUE_DARK, borderRadius: 8, borderSkipped: false, maxBarThickness: 34, order: 2
+                },
+                {
+                    type: 'bar', label: 'Estimated cost', data: weeks.map(w => w.estimate), yAxisID: 'y',
+                    backgroundColor: c => weeks[c.dataIndex] && weeks[c.dataIndex].estimate > weeks[c.dataIndex].budget
+                        ? '#dc2626' : vGradient(c.chart, NAVY_MID, NAVY),
+                    hoverBackgroundColor: NAVY_MID, borderRadius: 8, borderSkipped: false, maxBarThickness: 34, order: 2
+                },
+                {
+                    type: 'line', label: 'Meal options', data: weeks.map(w => w.meals), yAxisID: 'y1',
+                    borderColor: BLUE_DARK, backgroundColor: '#fff', borderWidth: 3, tension: .4,
+                    pointRadius: 5, pointHoverRadius: 8, pointBorderWidth: 3, pointBorderColor: BLUE_DARK, order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            animation: { duration: climb, easing: 'easeOutQuart', delay },
+            animations: { y: { from: ctx => ctx.chart.scales.y ? ctx.chart.scales.y.getPixelForValue(0) : undefined } },
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'rectRounded', color: NAVY, padding: 18 } },
+                tooltip: {
+                    backgroundColor: NAVY, padding: 12, cornerRadius: 12, boxPadding: 4, usePointStyle: true,
+                    callbacks: {
+                        title: items => `${weeks[items[0].dataIndex].range} · ${weeks[items[0].dataIndex].relation}`,
+                        label: c => c.dataset.type === 'line'
+                            ? ` ${c.parsed.y} meal option${c.parsed.y === 1 ? '' : 's'}`
+                            : ` ${c.dataset.label}: ${rand(c.parsed.y)}`,
+                        footer: items => {
+                            const w = weeks[items[0].dataIndex];
+                            if (!w.budget) return 'No budget set';
+                            const pct = w.estimate / w.budget * 100;
+                            return w.estimate > w.budget
+                                ? `Over budget by ${rand(w.estimate - w.budget)}`
+                                : `${pct.toFixed(1)}% of budget · ${rand(w.budget - w.estimate)} left`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false }, border: { display: false },
+                    ticks: { color: (c) => weeks[c.index] && weeks[c.index].relation === 'This week' ? NAVY : GREY,
+                             font: (c) => ({ weight: weeks[c.index] && weeks[c.index].relation === 'This week' ? '700' : '500' }) }
+                },
+                y: {
+                    beginAtZero: true, grid: { color: 'rgba(11,42,74,.07)' }, border: { display: false },
+                    ticks: { color: GREY, callback: v => 'R' + Number(v).toLocaleString('en-ZA') }
+                },
+                y1: {
+                    beginAtZero: true, position: 'right', grid: { display: false }, border: { display: false },
+                    ticks: { color: BLUE_DARK, precision: 0 },
+                    title: { display: true, text: 'Meal options', color: BLUE_DARK }
+                }
+            },
+            // Hovering a week in the chart highlights its row in the list below
+            onHover: (evt, active) => {
+                document.querySelectorAll('.mp-week.is-linked').forEach(r => r.classList.remove('is-linked'));
+                if (active.length) document.querySelector(`.mp-week[data-plan-id="${weeks[active[0].index].id}"]`)?.classList.add('is-linked');
+            }
+        },
+        plugins: [currentBand]
+    });
+
+    // …and hovering a row in the list highlights that week in the chart
+    document.querySelectorAll('.mp-week[data-plan-id]').forEach(row => {
+        const index = weeks.findIndex(w => String(w.id) === row.dataset.planId);
+        if (index < 0) return;
+        row.addEventListener('mouseenter', () => {
+            const active = [0, 1, 2].map(d => ({ datasetIndex: d, index }));
+            chart.setActiveElements(active);
+            chart.tooltip.setActiveElements(active, { x: chart.scales.x.getPixelForValue(index), y: chart.chartArea.top });
+            chart.update('none');
+        });
+        row.addEventListener('mouseleave', () => {
+            chart.setActiveElements([]);
+            chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+            chart.update('none');
+        });
+    });
+})();
+</script>
+}

@@ -1,0 +1,8 @@
+@model IList<DietaryProfileRow>
+@{ ViewData["Title"] = "Dietary Profiles"; }
+
+<partial name="_DietaryBoard" model="Model" />
+
+@section Scripts {
+    <partial name="_DietaryBoardScripts" model="Model" />
+}

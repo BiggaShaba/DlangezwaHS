@@ -1,0 +1,117 @@
+@model RegisterTeacherViewModel
+@{ ViewData["Title"] = "Register Teacher"; }
+
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Teachers">Teachers</a></li>
+        <li class="breadcrumb-item active">Register</li>
+    </ol></nav>
+    <h2><i class="bi bi-person-plus me-2"></i>Register New Teacher</h2>
+    <p>System will generate login credentials and email them to the teacher.</p>
+</div>
+
+<div class="row justify-content-center">
+<div class="col-lg-8">
+<div class="card">
+    <div class="card-body p-4">
+        <form asp-action="RegisterTeacher" method="post">
+            @Html.AntiForgeryToken()
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small py-2"></div>
+
+            <h5 class="fw-bold mb-3" style="color:#0B2A4A;"><i class="bi bi-person me-2"></i>Teacher Details</h5>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label asp-for="FirstName" class="form-label">First Name <span class="text-danger">*</span></label>
+                    <input asp-for="FirstName" class="form-control" placeholder="First name" />
+                    <span asp-validation-for="FirstName" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="LastName" class="form-label">Surname <span class="text-danger">*</span></label>
+                    <input asp-for="LastName" class="form-control" placeholder="Surname" />
+                    <span asp-validation-for="LastName" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Email" class="form-label">Email Address <span class="text-danger">*</span></label>
+                    <input asp-for="Email" class="form-control" type="email" placeholder="teacher@school.edu.za" />
+                    <span asp-validation-for="Email" class="text-danger small"></span>
+                    <div class="form-text">Login credentials will be sent to this address.</div>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Phone" class="form-label">Phone</label>
+                    <input asp-for="Phone" class="form-control" placeholder="0xx xxx xxxx" />
+                </div>
+            </div>
+
+            <hr class="my-4" />
+
+            <h5 class="fw-bold mb-3" style="color:#0B2A4A;">
+                <i class="bi bi-grid me-2"></i>Class &amp; Subject Assignments
+                <small class="text-muted fw-normal fs-6 ms-2">(pair each class with a subject)</small>
+            </h5>
+
+            <div id="assignment-rows">
+                <div class="assignment-row row g-2 mb-2 align-items-center">
+                    <div class="col-md-5">
+                        <select name="ClassIds" class="form-select">
+                            <option value="">— Select Class —</option>
+                            @foreach (var c in Model.AllClasses)
+                            { <option value="@c.Id">@c.DisplayName</option> }
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <select name="SubjectIds" class="form-select">
+                            <option value="">— Select Subject —</option>
+                            @foreach (var s in Model.AllSubjects)
+                            { <option value="@s.Id">@s.Name</option> }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100 remove-row">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" id="add-assignment" class="btn btn-outline-secondary btn-sm mt-2">
+                <i class="bi bi-plus me-1"></i>Add Another Class/Subject
+            </button>
+
+            <div class="alert alert-info small mt-3 py-2">
+                <i class="bi bi-info-circle me-1"></i>
+                The teacher will receive an email with their email address and a generated temporary password.
+                They can log in at <strong>/Account/Login</strong>.
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-dhs-primary px-4">
+                    <i class="bi bi-envelope me-1"></i>Register &amp; Send Credentials
+                </button>
+                <a asp-action="Teachers" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>
+
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+<script>
+// Store template HTML for cloning
+const rowTemplate = document.querySelector('.assignment-row').cloneNode(true);
+
+document.getElementById('add-assignment').addEventListener('click', function() {
+    const newRow = rowTemplate.cloneNode(true);
+    newRow.querySelectorAll('select').forEach(s => s.value = '');
+    document.getElementById('assignment-rows').appendChild(newRow);
+});
+
+document.getElementById('assignment-rows').addEventListener('click', function(e) {
+    if (e.target.closest('.remove-row')) {
+        const rows = document.querySelectorAll('.assignment-row');
+        if (rows.length > 1) e.target.closest('.assignment-row').remove();
+    }
+});
+</script>
+}

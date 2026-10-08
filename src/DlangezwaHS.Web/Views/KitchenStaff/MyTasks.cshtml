@@ -1,0 +1,209 @@
+@model IList<KitchenTaskRow>
+@{
+    ViewData["Title"] = "My Kitchen Tasks";
+    var isHeadChef = ViewBag.IsHeadChef as bool? ?? false;
+    var today = DlangezwaHS.Web.Services.SchoolClock.Today;
+    // Current = anything not finished from today on (or still in progress), plus what was finished today
+    var current = Model.Where(t => (t.Status != "Done" && (t.ScheduledDate.Date >= today || t.Status == "InProgress"))
+                                 || (t.Status == "Done" && t.ScheduledDate.Date == today))
+        .OrderBy(t => t.ScheduledDate).ThenBy(t => t.StartTime).ToList();
+    var previous = Model.Except(current).OrderByDescending(t => t.ScheduledDate).ThenByDescending(t => t.StartTime).ToList();
+    var timed = previous.Where(t => t.MinutesPerServing is not null).ToList();
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+}
+
+<style>
+    .mt-task { position: relative; border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1.15rem 1.2rem; height: 100%;
+        display: flex; flex-direction: column; overflow: hidden; transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; }
+    .mt-task:hover { transform: translateY(-5px); box-shadow: var(--shadow-hover); }
+    .mt-task::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--k-accent, var(--dhs-blue-dark)); }
+    .mt-task.breakfast { --k-accent: var(--k-breakfast); } .mt-task.lunch { --k-accent: var(--k-lunch); } .mt-task.dinner { --k-accent: var(--k-dinner); }
+    .mt-task.running { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.15), var(--shadow-ambient); }
+    .mt-task.done { background: #f0fdf4; border-color: #bbf7d0; }
+    .mt-menu { font-size: 1.1rem; font-weight: 700; color: var(--dhs-navy); margin: .45rem 0 .15rem; }
+    .mt-facts { display: flex; flex-wrap: wrap; gap: .35rem; margin: .6rem 0 .9rem; }
+    .mt-timer { display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem; border-radius: 14px; background: #fffbeb; color: #92400e; margin-bottom: .8rem; font-size: .88rem; }
+    .mt-timer .dot { width: 10px; height: 10px; border-radius: 50%; background: #f59e0b; animation: mt-blink 1.2s ease-in-out infinite; }
+    @@keyframes mt-blink { 50% { opacity: .25; } }
+    .mt-timer .clock { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.05rem; margin-left: auto; }
+    .mt-result { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; padding: .6rem; border-radius: 14px; background: #dcfce7; color: #166534; text-align: center; margin-bottom: .8rem; }
+    .mt-result strong { display: block; font-size: 1.05rem; }
+    .mt-result span { font-size: .72rem; }
+    @@media (prefers-reduced-motion: reduce) { .mt-timer .dot { animation: none; } }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-list-check me-2"></i>My Kitchen Tasks</h2>
+        <p>Start a task when you begin cooking and finish it when the meal is ready — the prep time per serving is worked out for you</p>
+    </div>
+    @if (isHeadChef)
+    {
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-action="KitchenTeams" class="k-btn k-btn-light"><i class="bi bi-people"></i>Kitchen Teams</a>
+            <a asp-action="KitchenScheduleCreate" class="k-btn k-btn-accent"><i class="bi bi-calendar-plus"></i>Schedule Teams</a>
+        </div>
+    }
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-calendar-day"></i>To do</div><div class="k-stat-value" data-count="@current.Count(t => t.Status == "Assigned")">@current.Count(t => t.Status == "Assigned")</div><div class="k-stat-note">not started yet</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-fire"></i>In progress</div><div class="k-stat-value" data-count="@current.Count(t => t.Status == "InProgress")">@current.Count(t => t.Status == "InProgress")</div><div class="k-stat-note">cooking now</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Completed</div><div class="k-stat-value" data-count="@Model.Count(t => t.Status == "Done")">@Model.Count(t => t.Status == "Done")</div><div class="k-stat-note">all time</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-stopwatch"></i>Your average</div><div class="k-stat-value">@(timed.Any() ? timed.Average(t => t.MinutesPerServing!.Value).ToString("0.0") : "—")</div><div class="k-stat-note">minutes per serving</div></div></div>
+</div>
+
+<div class="k-section k-rise mt-0" style="--i:4">Current tasks</div>
+@if (!current.Any())
+{
+    <div class="k-empty k-rise" style="--i:5"><i class="bi bi-cup-hot"></i><strong>No tasks right now</strong><p>Published tasks for today and the coming days appear here.</p></div>
+}
+<div class="row g-3">
+    @foreach (var (t, i) in current.Select((t, i) => (t, i)))
+    {
+        var key = t.MealType.ToLowerInvariant();
+        var state = t.Status == "InProgress" ? "running" : t.Status == "Done" ? "done" : "";
+        <div class="col-md-6 col-xl-4 k-rise" style="--i:@(i + 5)">
+            <div class="mt-task @key @state">
+                <div class="d-flex justify-content-between align-items-center gap-2">
+                    <span class="k-meal @key"><i class="bi @TypeIcon(t.MealType)"></i>@t.MealType</span>
+                    <span class="k-sub">@(t.ScheduledDate.Date == today ? "Today" : t.ScheduledDate.ToString("ddd dd MMM")) · @t.StartTime–@t.EndTime</span>
+                </div>
+                <div class="mt-menu">@t.MenuDescription</div>
+                <div class="k-sub">@t.TaskDescription</div>
+                <div class="mt-facts">
+                    <span class="k-pill"><i class="bi bi-people"></i>@(t.TeamName ?? "—")</span>
+                    <span class="k-pill"><i class="bi bi-basket"></i>@t.Portions portions</span>
+                </div>
+                @if (!string.IsNullOrEmpty(t.DelayReason)) { <div class="small text-danger mb-2"><i class="bi bi-exclamation-triangle me-1"></i>Delayed: @t.DelayReason</div> }
+
+                @if (t.Status == "InProgress" && t.StartedAt is DateTime started)
+                {
+                    <div class="mt-timer" data-started="@DateTime.SpecifyKind(started, DateTimeKind.Utc).ToString("o")">
+                        <span class="dot" aria-hidden="true"></span>
+                        <span>Started @started.AddHours(2).ToString("HH:mm")</span>
+                        <span class="clock" data-clock>0:00</span>
+                    </div>
+                }
+                @if (t.Status == "Done")
+                {
+                    <div class="mt-result">
+                        <div><strong>@t.MinutesTaken?.ToString("0")</strong><span>minutes</span></div>
+                        <div><strong>@t.Portions</strong><span>portions</span></div>
+                        <div><strong>@(t.MinutesPerServing?.ToString("0.##") ?? "—")</strong><span>min / serving</span></div>
+                    </div>
+                }
+
+                <div class="d-flex gap-2 mt-auto flex-wrap">
+                    @if (t.Status == "Assigned")
+                    {
+                        <form method="post" asp-action="UpdateTaskStatus" class="flex-grow-1 m-0" data-busy>
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="taskId" value="@t.Id" />
+                            <input type="hidden" name="status" value="InProgress" />
+                            <button type="submit" class="k-btn k-btn-primary w-100" data-busy-text="Starting…"><i class="bi bi-play-fill"></i>In Progress</button>
+                        </form>
+                    }
+                    else if (t.Status == "InProgress")
+                    {
+                        <form method="post" asp-action="UpdateTaskStatus" class="flex-grow-1 m-0" data-busy>
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="taskId" value="@t.Id" />
+                            <input type="hidden" name="status" value="Done" />
+                            <button type="submit" class="k-btn w-100" style="background:#10b981;color:#fff" data-busy-text="Finishing…"><i class="bi bi-check2-circle"></i>Done</button>
+                        </form>
+                    }
+                    @if (t.Status != "Done")
+                    {
+                        <button type="button" class="k-btn k-btn-danger" data-delay="@t.Id" data-menu="@t.MenuDescription" title="Report a delay"><i class="bi bi-exclamation-triangle"></i><span class="d-none d-sm-inline">Delay</span></button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="k-card mt-4 k-rise" style="--i:8">
+    <div class="k-card-head"><div><h3 class="k-title">Previous kitchen tasks</h3><p class="k-sub">Newest first · time taken from start to finish</p></div></div>
+    @if (!previous.Any())
+    {
+        <p class="k-sub mb-0">No previous tasks yet.</p>
+    }
+    else
+    {
+        <div class="k-table-wrap">
+            <table class="k-table">
+                <thead><tr><th>Date</th><th>Meal</th><th>Menu</th><th>Team</th><th class="k-num">Portions</th><th>Started</th><th>Finished</th><th class="k-num">Time taken</th><th class="k-num">Per serving</th></tr></thead>
+                <tbody id="prevList" data-more-list data-more-initial="5" data-more-step="5">
+                @foreach (var t in previous)
+                {
+                    <tr data-more-item>
+                        <td class="text-nowrap">@t.ScheduledDate.ToString("ddd dd MMM")</td>
+                        <td><span class="k-meal @t.MealType.ToLowerInvariant()"><i class="bi @TypeIcon(t.MealType)"></i>@t.MealType</span></td>
+                        <td class="fw-semibold">@t.MenuDescription</td>
+                        <td><span class="k-sub">@(t.TeamName ?? "—")</span></td>
+                        <td class="k-num">@t.Portions</td>
+                        <td>@(t.StartedAt?.AddHours(2).ToString("HH:mm") ?? "—")</td>
+                        <td>@(t.CompletedAt?.AddHours(2).ToString("HH:mm") ?? (t.Status == "Done" ? "—" : "Not done"))</td>
+                        <td class="k-num">@(t.MinutesTaken is double m ? $"{m:0} min" : "—")</td>
+                        <td class="k-num fw-bold">@(t.MinutesPerServing is double p ? $"{p:0.##} min" : "—")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="prevList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+    }
+</div>
+
+<!-- Report a delay -->
+<div class="modal fade k-modal" id="delayModal" tabindex="-1" aria-labelledby="delayTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" asp-action="UpdateTaskStatus" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="taskId" />
+                <input type="hidden" name="status" value="InProgress" />
+                <div class="k-modal-head">
+                    <span class="k-bubble b1"></span><span class="k-bubble b2"></span><span class="k-bubble b3"></span>
+                    <h5 id="delayTitle">Report a delay</h5>
+                    <p data-menu></p>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="k-label" for="delayReason">What's causing the delay?</label>
+                    <textarea id="delayReason" name="delayReason" class="form-control k-input" rows="3" maxlength="300" required placeholder="e.g. Gas ran out — waiting for a refill"></textarea>
+                    <div class="k-sub mt-2">The admin is emailed straight away.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="k-btn k-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="k-btn k-btn-danger" data-busy-text="Reporting…"><i class="bi bi-exclamation-triangle"></i>Report delay</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // Live timers for tasks in progress
+    const timers = document.querySelectorAll('[data-started]');
+    const tick = () => timers.forEach(t => {
+        const secs = Math.max(0, Math.floor((Date.now() - new Date(t.dataset.started).getTime()) / 1000));
+        const h = Math.floor(secs / 3600), m = Math.floor(secs % 3600 / 60), s = secs % 60;
+        t.querySelector('[data-clock]').textContent = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+    });
+    if (timers.length) { tick(); setInterval(tick, 1000); }
+
+    const modal = document.getElementById('delayModal');
+    document.querySelectorAll('[data-delay]').forEach(b => b.addEventListener('click', () => {
+        modal.querySelector('input[name=taskId]').value = b.dataset.delay;
+        modal.querySelector('[data-menu]').textContent = b.dataset.menu;
+        modal.querySelector('textarea').value = '';
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }));
+    modal.addEventListener('shown.bs.modal', () => modal.querySelector('textarea').focus());
+})();
+</script>
+}

@@ -1,0 +1,242 @@
+@model KitchenDashboardViewModel
+@{
+    ViewData["Title"] = "Kitchen Dashboard";
+    var hour = DlangezwaHS.Web.Services.SchoolClock.Now.Hour;
+    var greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    var camel = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+    var ordersJson = System.Text.Json.JsonSerializer.Serialize(Model.MostOrdered, camel);
+    var ratingsJson = System.Text.Json.JsonSerializer.Serialize(Model.TopRated, camel);
+}
+
+<style>
+    /* ── Entrance choreography: everything eases in, top to bottom ── */
+    .kd-rise { opacity: 0; transform: translateY(18px); animation: kd-rise .7s var(--ease-spring) forwards; animation-delay: calc(var(--i, 0) * 90ms); }
+    @@keyframes kd-rise { to { opacity: 1; transform: none; } }
+
+    .kd-hero { position: relative; overflow: hidden; border-radius: 22px; padding: 1.6rem 1.8rem; color: #fff;
+        background: linear-gradient(135deg, var(--dhs-navy) 0%, var(--dhs-navy-mid) 100%); box-shadow: var(--shadow-pop); }
+    .kd-hero::before, .kd-hero::after { content: ""; position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(151,200,233,.35), transparent 70%); pointer-events: none; }
+    .kd-hero::before { width: 320px; height: 320px; right: -80px; top: -140px; animation: kd-float 9s ease-in-out infinite; }
+    .kd-hero::after  { width: 220px; height: 220px; left: 30%; bottom: -150px; animation: kd-float 11s ease-in-out infinite reverse; }
+    @@keyframes kd-float { 50% { transform: translate(-18px, 14px) scale(1.08); } }
+    .kd-hero h2 { font-weight: 700; margin: 0; }
+    .kd-hero p  { margin: .25rem 0 0; color: rgba(255,255,255,.75); }
+    .kd-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; position: relative; z-index: 1; }
+    .kd-chip { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .8rem; border-radius: 999px; font-size: .85rem;
+        background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(6px); }
+    .kd-chip i { color: var(--dhs-blue); }
+    .kd-chip.warn { background: rgba(151,200,233,.22); }
+
+    /* ── Big quick-action tiles ── */
+    .kd-tile { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 1.2rem; min-height: 190px; padding: 1.4rem;
+        border-radius: 22px; text-decoration: none; color: #fff; overflow: hidden; isolation: isolate;
+        background: linear-gradient(145deg, var(--dhs-navy-mid) 0%, var(--dhs-navy) 100%); box-shadow: var(--shadow-ambient);
+        transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring); }
+    .kd-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity .35s ease;
+        background: radial-gradient(120% 90% at 100% 0%, rgba(151,200,233,.55), transparent 60%); }
+    .kd-tile:hover, .kd-tile:focus-visible { color: #fff; transform: translateY(-8px); box-shadow: var(--shadow-hover); }
+    .kd-tile:hover::before, .kd-tile:focus-visible::before { opacity: 1; }
+    .kd-tile:active { transform: translateY(-2px) scale(.98); }
+    .kd-tile:focus-visible { outline: 3px solid var(--dhs-blue); outline-offset: 3px; }
+    .kd-tile.primary { background: linear-gradient(145deg, var(--dhs-blue-dark) 0%, var(--dhs-navy-mid) 100%); }
+    .kd-icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 2rem; color: var(--dhs-navy);
+        background: var(--dhs-blue); box-shadow: 0 10px 24px -10px rgba(151,200,233,.9); transition: transform .45s var(--ease-spring); }
+    .kd-tile:hover .kd-icon { transform: rotate(-8deg) scale(1.1); }
+    .kd-tile h3 { font-size: 1.3rem; font-weight: 700; margin: 0; }
+    .kd-tile .sub { color: rgba(255,255,255,.75); font-size: .9rem; margin-top: .15rem; }
+    .kd-go { position: absolute; right: 1.2rem; top: 1.2rem; font-size: 1.3rem; color: rgba(255,255,255,.55); transition: transform .35s var(--ease-spring), color .2s; }
+    .kd-tile:hover .kd-go { transform: translate(4px, -4px); color: #fff; }
+
+    /* ── Chart cards ── */
+    .kd-card { border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1.4rem; height: 100%; }
+    .kd-card h5 { color: var(--dhs-navy); font-weight: 700; margin: 0; }
+    .kd-card .hint { color: var(--dhs-grey); font-size: .85rem; }
+    .kd-canvas { position: relative; height: 300px; }
+    .kd-empty { height: 300px; display: grid; place-items: center; text-align: center; color: var(--dhs-grey); }
+    .kd-empty i { font-size: 2.5rem; color: var(--dhs-blue); display: block; margin-bottom: .4rem; }
+    .kd-score { display: inline-flex; align-items: baseline; gap: .25rem; padding: .3rem .8rem; border-radius: 999px; background: var(--dhs-light); color: var(--dhs-navy); font-weight: 700; }
+    .kd-score small { color: var(--dhs-grey); font-weight: 500; }
+    .kd-score i { color: var(--dhs-blue-dark); }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .kd-rise { animation: none; opacity: 1; transform: none; }
+        .kd-hero::before, .kd-hero::after { animation: none; }
+        .kd-tile, .kd-icon, .kd-go { transition: none; }
+    }
+</style>
+
+<section class="kd-hero kd-rise" style="--i:0">
+    <div class="position-relative" style="z-index:1">
+        <h2>@greeting@(string.IsNullOrEmpty(Model.FirstName) ? "" : ", " + Model.FirstName)</h2>
+        <p>@Model.Today.ToString("dddd, d MMMM yyyy") — here's what's on in the kitchen today.</p>
+    </div>
+    <div class="kd-chips">
+        <span class="kd-chip"><i class="bi bi-egg-fried"></i>@Model.MealsToday meal option(s) today</span>
+        <span class="kd-chip"><i class="bi bi-basket"></i>@Model.OrdersToday order(s) for today</span>
+        <span class="kd-chip @(Model.TasksPending > 0 ? "warn" : "")"><i class="bi bi-list-check"></i>@Model.TasksPending task(s) to do</span>
+        @if (Model.LowStockItems > 0)
+        {
+            <span class="kd-chip warn"><i class="bi bi-box-seam"></i>@Model.LowStockItems low on stock</span>
+        }
+        @if (Model.OpenQualityAlerts > 0)
+        {
+            <span class="kd-chip warn"><i class="bi bi-star"></i>@Model.OpenQualityAlerts quality alert(s)</span>
+        }
+    </div>
+</section>
+
+<h6 class="text-uppercase fw-bold mt-4 mb-3 kd-rise" style="--i:1; color:var(--dhs-grey); letter-spacing:.08em; font-size:.78rem;">Quick actions</h6>
+<div class="row g-3">
+    <div class="col-12 col-sm-6 col-xl-3 kd-rise" style="--i:2">
+        <a class="kd-tile primary" asp-action="MealScanner">
+            <i class="bi bi-arrow-up-right kd-go" aria-hidden="true"></i>
+            <span class="kd-icon"><i class="bi bi-qr-code-scan" aria-hidden="true"></i></span>
+            <div><h3>Meal Scanner</h3><div class="sub">Scan badges at the dining hall</div></div>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3 kd-rise" style="--i:3">
+        <a class="kd-tile" asp-action="MealPlanCreate">
+            <i class="bi bi-arrow-up-right kd-go" aria-hidden="true"></i>
+            <span class="kd-icon"><i class="bi bi-calendar-plus" aria-hidden="true"></i></span>
+            <div><h3>New Meal Plan</h3><div class="sub">Plan and publish a week's menu</div></div>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3 kd-rise" style="--i:4">
+        <a class="kd-tile" asp-action="Inventory">
+            <i class="bi bi-arrow-up-right kd-go" aria-hidden="true"></i>
+            <span class="kd-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+            <div><h3>Inventory Management</h3><div class="sub">@(Model.LowStockItems == 0 ? "Stock levels are healthy" : $"{Model.LowStockItems} ingredient(s) low on stock")</div></div>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3 kd-rise" style="--i:5">
+        <a class="kd-tile" asp-action="MyTasks">
+            <i class="bi bi-arrow-up-right kd-go" aria-hidden="true"></i>
+            <span class="kd-icon"><i class="bi bi-calendar2-check" aria-hidden="true"></i></span>
+            <div><h3>Kitchen Schedule</h3><div class="sub">@(Model.TasksPending == 0 ? "No tasks waiting" : $"{Model.TasksPending} task(s) waiting for you")</div></div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mt-2">
+    <div class="col-lg-6 kd-rise" style="--i:6">
+        <div class="kd-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div><h5>Most ordered meals</h5><div class="hint">Confirmed pre-orders, top 6</div></div>
+                <i class="bi bi-basket fs-4" style="color:var(--dhs-blue-dark)" aria-hidden="true"></i>
+            </div>
+            @if (Model.MostOrdered.Any())
+            {
+                <div class="kd-canvas"><canvas id="ordersChart" role="img" aria-label="Bar chart of the most ordered meals"></canvas></div>
+            }
+            else
+            {
+                <div class="kd-empty"><div><i class="bi bi-basket"></i>No pre-orders yet.<br />They'll appear here once parents and learners start ordering.</div></div>
+            }
+        </div>
+    </div>
+    <div class="col-lg-6 kd-rise" style="--i:7">
+        <div class="kd-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div><h5>Meal ratings</h5><div class="hint">Average out of 5, top 6 rated</div></div>
+                @if (Model.TotalRatings > 0)
+                {
+                    <span class="kd-score" title="Average across all @Model.TotalRatings ratings"><i class="bi bi-star-fill"></i>@Model.OverallRating.ToString("0.0")<small>/ 5 overall</small></span>
+                }
+            </div>
+            @if (Model.TopRated.Any())
+            {
+                <div class="kd-canvas"><canvas id="ratingsChart" role="img" aria-label="Bar chart of average rating per meal"></canvas></div>
+            }
+            else
+            {
+                <div class="kd-empty"><div><i class="bi bi-star"></i>No ratings yet.<br />Feedback appears here after meals are served.</div></div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    if (typeof Chart === 'undefined') return;
+    const orders = @Html.Raw(ordersJson);
+    const ratings = @Html.Raw(ratingsJson);
+
+    // Brand palette
+    const NAVY = '#0B2A4A', NAVY_MID = '#1a4a7a', BLUE = '#97C8E9', BLUE_DARK = '#5ea8d3', GREY = '#6B7280';
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Bars start at zero and slowly climb to their value on every page load
+    const CLIMB = reduce ? 0 : 2600;
+    const animation = {
+        duration: CLIMB,
+        easing: 'easeOutQuart',
+        delay: ctx => ctx.type === 'data' && ctx.mode === 'default' ? ctx.dataIndex * 140 : 0
+    };
+
+    const gradient = (chart, from, to) => {
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return from;
+        const g = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+        g.addColorStop(0, from); g.addColorStop(1, to);
+        return g;
+    };
+    const short = s => s.length > 22 ? s.slice(0, 21) + '…' : s;
+
+    const base = (max, tickCb) => ({
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        animation,
+        layout: { padding: { right: 12 } },
+        plugins: {
+            legend: { display: false },
+            tooltip: { backgroundColor: NAVY, padding: 12, cornerRadius: 10, displayColors: false, titleFont: { weight: '600' } }
+        },
+        scales: {
+            x: { beginAtZero: true, max, grid: { color: 'rgba(11,42,74,.07)' }, border: { display: false }, ticks: { color: GREY, precision: 0, callback: tickCb } },
+            y: { grid: { display: false }, border: { display: false }, ticks: { color: NAVY, font: { weight: '600' } } }
+        }
+    });
+
+    const ordersEl = document.getElementById('ordersChart');
+    if (ordersEl && orders.length) {
+        const top = Math.max(...orders.map(o => o.orders));
+        const opts = base(Math.ceil(top * 1.15) || 1);
+        opts.plugins.tooltip.callbacks = { label: c => `${c.parsed.x} order${c.parsed.x === 1 ? '' : 's'}` };
+        new Chart(ordersEl, {
+            type: 'bar',
+            data: {
+                labels: orders.map(o => short(o.meal)),
+                datasets: [{
+                    data: orders.map(o => o.orders),
+                    backgroundColor: c => gradient(c.chart, BLUE, NAVY_MID),
+                    borderRadius: 10, borderSkipped: false, barThickness: 22
+                }]
+            },
+            options: opts
+        });
+    }
+
+    const ratingsEl = document.getElementById('ratingsChart');
+    if (ratingsEl && ratings.length) {
+        const opts = base(5, v => v + ' ★');
+        opts.scales.x.ticks.stepSize = 1;
+        opts.plugins.tooltip.callbacks = { label: c => `${c.parsed.x.toFixed(1)} / 5 · ${ratings[c.dataIndex].ratings} rating${ratings[c.dataIndex].ratings === 1 ? '' : 's'}` };
+        new Chart(ratingsEl, {
+            type: 'bar',
+            data: {
+                labels: ratings.map(r => short(r.meal)),
+                datasets: [{
+                    data: ratings.map(r => r.average),
+                    backgroundColor: c => gradient(c.chart, BLUE_DARK, NAVY),
+                    borderRadius: 10, borderSkipped: false, barThickness: 22
+                }]
+            },
+            options: opts
+        });
+    }
+})();
+</script>
+}

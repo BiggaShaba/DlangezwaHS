@@ -1,0 +1,61 @@
+@model IList<TodayMealOption>
+@{
+    ViewData["Title"] = "Meal Scanner";
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+}
+
+<style>
+    .ms-service { position: relative; overflow: hidden; height: 100%; border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient);
+        padding: 1.4rem; display: flex; flex-direction: column; transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; }
+    .ms-service:hover { transform: translateY(-8px); box-shadow: var(--shadow-hover); }
+    .ms-service::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; background: var(--k-accent); }
+    .ms-service.breakfast { --k-accent: var(--k-breakfast); } .ms-service.lunch { --k-accent: var(--k-lunch); } .ms-service.dinner { --k-accent: var(--k-dinner); }
+    .ms-service:hover { border-color: var(--k-accent); }
+    .ms-icon { width: 58px; height: 58px; border-radius: 18px; display: grid; place-items: center; font-size: 1.8rem; color: #fff; background: var(--k-accent);
+        box-shadow: 0 12px 24px -12px var(--k-accent); transition: transform .45s var(--ease-spring); }
+    .ms-service:hover .ms-icon { transform: rotate(-8deg) scale(1.08); }
+    .ms-type { font-size: 1.35rem; font-weight: 700; color: var(--dhs-navy); margin: .9rem 0 .1rem; }
+    .ms-menu { font-size: .9rem; color: #334155; flex-grow: 1; margin: .5rem 0 1rem; }
+</style>
+
+<div class="page-header k-header">
+    <h2><i class="bi bi-qr-code-scan me-2"></i>Meal Scanner</h2>
+    <p>@(((DateTime)ViewBag.Today).ToString("dddd dd MMMM yyyy")) · choose a meal to start scanning badges</p>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="k-empty k-rise">
+        <i class="bi bi-calendar-x"></i>
+        <strong>No meals are being served today</strong>
+        <p>The scanner opens for meals on today's date in a published weekly plan.</p>
+        @if (ViewBag.NextService is string next)
+        {
+            <span class="k-pill mt-3"><i class="bi bi-arrow-right-circle"></i>Next: @next</span>
+        }
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        @for (var i = 0; i < Model.Count; i++)
+        {
+            var m = Model[i];
+            var key = m.MealType.ToLowerInvariant();
+            <div class="col-md-6 col-xl-4 k-rise" style="--i:@i">
+                <div class="ms-service @key">
+                    <span class="ms-icon"><i class="bi @TypeIcon(m.MealType)" aria-hidden="true"></i></span>
+                    <div class="ms-type">@m.MealType</div>
+                    <div class="k-sub">@(string.IsNullOrEmpty(m.ServingTime) ? "" : $"Served {m.ServingTime} · ")<strong data-count="@m.PreOrderCount">@m.PreOrderCount</strong> pre-order(s)</div>
+                    <div class="ms-menu">
+                        @foreach (var opt in m.MenuDescription.Split(" / "))
+                        {
+                            <span class="k-pill me-1 mb-1">@opt</span>
+                        }
+                    </div>
+                    <a asp-action="MealScanner" asp-route-mealPlanItemId="@m.MealPlanItemId" class="k-btn k-btn-primary w-100"><i class="bi bi-qr-code-scan"></i>Start Scanning</a>
+                </div>
+            </div>
+        }
+    </div>
+}

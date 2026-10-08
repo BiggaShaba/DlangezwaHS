@@ -1,0 +1,48 @@
+@model IList<TeacherSummaryRow>
+@{ ViewData["Title"] = "Teachers"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-person-badge me-2"></i>Teachers</h2><p>Manage teacher accounts and class assignments</p></div>
+    <a asp-action="Settings" asp-fragment="tab-employ" class="btn btn-dhs-secondary">
+        <i class="bi bi-person-plus me-1"></i>Employ Teacher
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-person-badge fs-1 d-block mb-3" style="color:#97C8E9;"></i>
+                <h5>No teachers registered yet</h5>
+                <a asp-action="Settings" asp-fragment="tab-employ" class="btn btn-dhs-primary mt-2">Employ First Teacher</a>
+            </div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Assignments</th><th>Login</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                @{ int i = 1; }
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td class="text-muted small">@(i++)</td>
+                        <td><strong>@t.FullName</strong><br/><small class="text-muted">@t.Phone</small></td>
+                        <td><small>@t.Email</small></td>
+                        <td><small>@t.Assignments</small></td>
+                        <td>@(t.HasLogin ? "<span class='badge badge-approved rounded-pill'>Active</span>" : "<span class='badge badge-pending rounded-pill'>No Login</span>")</td>
+                        <td>@(t.IsActive ? "<span class='badge badge-approved rounded-pill'>Active</span>" : "<span class='badge badge-rejected rounded-pill'>Inactive</span>")</td>
+                        <td>
+                            <a asp-action="RegisterTeacher" asp-route-id="@t.Id"
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

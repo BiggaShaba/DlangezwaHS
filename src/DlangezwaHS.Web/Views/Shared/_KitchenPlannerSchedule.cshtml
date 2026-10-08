@@ -1,0 +1,17 @@
+@model KitchenPlannerSchedule
+@* One scheduled team under a meal on the planner (same markup the page adds after scheduling) *@
+<div class="kp-sched" data-schedule="@Model.ScheduleId">
+    <span class="ico"><i class="bi bi-people-fill"></i></span>
+    <span class="team">@Model.TeamName</span>
+    <span class="side">
+        @if (Model.IsPublished)
+        {
+            <span class="k-pill ok">@(Model.Status is "Completed" or "Delayed" or "InProgress" ? Model.Status.Replace("InProgress", "In progress") : "Published")</span>
+        }
+        else
+        {
+            <button type="button" class="k-btn k-btn-primary k-btn-sm" data-publish="@Model.ScheduleId"><i class="bi bi-send"></i>Publish</button>
+        }
+    </span>
+    <span class="meta"><i class="bi bi-clock me-1"></i>@Model.Shift · <i class="bi bi-stopwatch me-1"></i>~@Model.EstimatedMinutes min prep · @Model.StaffCount/@Model.StaffRecommended staff</span>
+</div>

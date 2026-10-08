@@ -1,0 +1,192 @@
+@model ParentDashboardV2ViewModel
+@{
+    ViewData["Title"] = "My Dashboard";
+    var hour = DlangezwaHS.Web.Services.SchoolClock.Now.Hour;
+    var greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    var enrolled = Model.Learners.Where(c => c.IsEnrolled).ToList();
+    var balance = enrolled.Sum(c => c.BalanceDue);
+    var withAtt = enrolled.Where(c => c.AttendancePct > 0).ToList();
+    var avgAtt = withAtt.Any() ? withAtt.Average(c => c.AttendancePct) : 0;
+    var boarders = Model.Learners.Count(c => c.HasBed);
+    string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    string StatusPill(string s) => s switch { "Enrolled" => "ok", "Approved" => "ok", "Rejected" => "danger", _ => "warn" };
+}
+
+<style>
+    .pd-card { position: relative; height: 100%; border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1.15rem 1.2rem;
+        display: flex; flex-direction: column; transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; overflow: hidden; }
+    .pd-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: linear-gradient(90deg, var(--dhs-blue), var(--dhs-blue-dark), var(--dhs-navy-mid));
+        transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease-spring); }
+    .pd-card:hover { transform: translateY(-6px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    .pd-card:hover::before { transform: scaleX(1); }
+    .pd-card .k-avatar { width: 50px; height: 50px; border-radius: 16px; font-size: 1rem; }
+    .pd-name { font-size: 1.08rem; font-weight: 700; color: var(--dhs-navy); margin: 0; }
+    .pd-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: 1rem 0; }
+    .pd-fact { border-radius: 14px; background: var(--dhs-light); padding: .55rem .6rem; text-align: center; }
+    .pd-fact .v { font-weight: 800; color: var(--dhs-navy); font-size: .98rem; line-height: 1.2; }
+    .pd-fact .l { font-size: .68rem; color: var(--dhs-grey); text-transform: uppercase; letter-spacing: .05em; }
+    .pd-fact.good .v { color: #059669; } .pd-fact.warn .v { color: #d97706; } .pd-fact.bad .v { color: #dc2626; }
+    .pd-login { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; padding-top: .75rem; margin-top: .75rem; border-top: 1px dashed #e2e8f0; font-size: .8rem; }
+    .pd-note { display: flex; gap: .7rem; align-items: flex-start; padding: .65rem .8rem; border-radius: 14px; background: #fffbeb; color: #92400e; font-size: .88rem; margin-bottom: .5rem;
+        animation: k-rise .45s var(--ease-spring) both; }
+    .pd-filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .pd-filter { border: 1.5px solid #e2e8f0; background: #fff; color: var(--dhs-navy); border-radius: 99px; padding: .38rem .9rem; font-size: .84rem; font-weight: 600; }
+    .pd-filter.active { background: var(--dhs-navy); border-color: var(--dhs-navy); color: #fff; }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-house-heart me-2"></i>@greeting, @Model.ParentName</h2>
+        <p>Everything about your learners — fees, attendance, boarding and reports — in one place</p>
+    </div>
+    <a asp-action="Apply" class="k-btn k-btn-accent"><i class="bi bi-plus-circle"></i>New Application</a>
+</div>
+
+@if (!Model.Learners.Any())
+{
+    <div class="k-empty k-rise">
+        <i class="bi bi-person-plus"></i>
+        <strong>No learners yet</strong>
+        <p>Submit an application to get started.</p>
+        <a asp-action="Apply" class="k-btn k-btn-primary mt-3"><i class="bi bi-plus-circle"></i>Apply Now</a>
+    </div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-people"></i>Learners</div><div class="k-stat-value" data-count="@Model.Learners.Count">@Model.Learners.Count</div><div class="k-stat-note">@enrolled.Count enrolled</div></div></div>
+        <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-house-door"></i>Boarding</div><div class="k-stat-value" data-count="@boarders">@boarders</div><div class="k-stat-note">with a bed in residence</div></div></div>
+        <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat @(balance > 0 ? "danger" : "")" style="@(balance > 0 ? "" : "--k-accent:#10b981")"><div class="k-stat-label"><i class="bi bi-wallet2"></i>Balance due</div>
+            <div class="k-stat-value" data-count="@balance.ToString("0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="R">R@(balance.ToString("N0"))</div><div class="k-stat-note">@(balance > 0 ? $"{enrolled.Count(c => c.BalanceDue > 0)} learner(s) with fees outstanding" : "all fees paid")</div></div></div>
+        <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-calendar-check"></i>Attendance</div>
+            <div class="k-stat-value"><span data-count="@avgAtt.ToString("0", System.Globalization.CultureInfo.InvariantCulture)">@avgAtt.ToString("0")</span>%</div><div class="k-stat-note">average · last 30 days</div></div></div>
+    </div>
+
+    @if (Model.Notifications.Any())
+    {
+        <div class="k-card mb-4 k-rise" style="--i:4">
+            <div class="k-card-head"><div><h3 class="k-title"><i class="bi bi-bell me-1"></i>Needs your attention</h3><p class="k-sub">@Model.Notifications.Count item(s)</p></div></div>
+            <div id="noteList" data-more-list data-more-initial="4" data-more-step="6">
+                @foreach (var n in Model.Notifications)
+                {
+                    <div class="pd-note" data-more-item><i class="bi bi-exclamation-circle mt-1"></i><span>@n</span></div>
+                }
+            </div>
+            <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost k-btn-sm" data-more-btn="noteList"><i class="bi bi-chevron-down"></i>See <span data-more-count>6</span> more</button></div>
+        </div>
+    }
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 k-rise" style="--i:5">
+        <div class="pd-filters" role="group" aria-label="Filter learners">
+            <button type="button" class="k-btn pd-filter active" data-filter="all">All <span class="opacity-75">@Model.Learners.Count</span></button>
+            <button type="button" class="k-btn pd-filter" data-filter="owing">Fees due <span class="opacity-75">@enrolled.Count(c => c.BalanceDue > 0)</span></button>
+            <button type="button" class="k-btn pd-filter" data-filter="attendance">Low attendance <span class="opacity-75">@enrolled.Count(c => c.AttendancePct > 0 && c.AttendancePct < 80)</span></button>
+            <button type="button" class="k-btn pd-filter" data-filter="pending">Applications <span class="opacity-75">@Model.Learners.Count(c => !c.IsEnrolled)</span></button>
+        </div>
+        <input type="search" id="learnerSearch" class="form-control k-input" style="max-width:260px" placeholder="Search learners…" aria-label="Search learners" />
+    </div>
+
+    <div class="row g-3" id="learnerGrid" data-more-list data-more-initial="9" data-more-step="9">
+        @foreach (var c in Model.Learners.OrderByDescending(c => c.BalanceDue > 0).ThenBy(c => c.LearnerName))
+        {
+            var attClass = c.AttendancePct == 0 ? "" : c.AttendanceGood ? "good" : c.AttendanceRisk ? "warn" : "bad";
+            <div class="col-md-6 col-xl-4" data-more-item data-search="@c.LearnerName.ToLowerInvariant() @c.ClassName.ToLowerInvariant()"
+                 data-owing="@(c.BalanceDue > 0 ? 1 : 0)" data-lowatt="@(c.IsEnrolled && c.AttendancePct > 0 && c.AttendancePct < 80 ? 1 : 0)" data-pending="@(c.IsEnrolled ? 0 : 1)">
+                <div class="pd-card">
+                    <div class="d-flex gap-3 align-items-center">
+                        <span class="k-avatar" aria-hidden="true">@Initials(c.LearnerName)</span>
+                        <div class="flex-grow-1 min-w-0">
+                            <h3 class="pd-name text-truncate">@c.LearnerName</h3>
+                            <div class="k-sub">@(c.IsEnrolled ? c.ClassName : "Not enrolled yet")@(c.HasBed ? $" · {c.RoomName}" : "")</div>
+                        </div>
+                        <span class="k-pill @StatusPill(c.ApplicationStatus)">@c.ApplicationStatus</span>
+                    </div>
+
+                    @if (c.IsEnrolled)
+                    {
+                        <div class="pd-facts">
+                            <div class="pd-fact @(c.BalanceDue > 0 ? "bad" : "good")"><div class="v">@(c.BalanceDue > 0 ? $"R{c.BalanceDue:N0}" : "Paid")</div><div class="l">Fees</div></div>
+                            <div class="pd-fact @attClass"><div class="v">@(c.AttendancePct > 0 ? $"{c.AttendancePct:0}%" : "—")</div><div class="l">Attendance</div></div>
+                            <div class="pd-fact @(c.HasProof ? "good" : "")"><div class="v">@(c.HasProof ? "Ready" : "—")</div><div class="l">Proof</div></div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mt-auto">
+                            <a asp-action="LearnerOverview" asp-route-learnerId="@c.LearnerId" class="k-btn k-btn-primary k-btn-sm flex-grow-1"><i class="bi bi-person-lines-fill"></i>Overview</a>
+                            <a asp-action="AcademicReport" asp-route-learnerId="@c.LearnerId" class="k-btn k-btn-ghost k-btn-sm" title="Academic report"><i class="bi bi-bar-chart"></i><span class="visually-hidden">Report</span></a>
+                            <a asp-action="LearnerAttendance" asp-route-learnerId="@c.LearnerId" class="k-btn k-btn-ghost k-btn-sm" title="Attendance"><i class="bi bi-calendar-check"></i><span class="visually-hidden">Attendance</span></a>
+                            @if (c.BalanceDue > 0)
+                            {
+                                <a asp-action="Pay" asp-route-learnerId="@c.LearnerId" asp-route-type="@c.PayType" class="k-btn k-btn-accent k-btn-sm"><i class="bi bi-credit-card"></i>Pay</a>
+                            }
+                        </div>
+                        <div class="pd-login">
+                            <span class="k-sub"><i class="bi bi-person-lock me-1"></i>Learner login</span>
+                            @if (!c.HasLogin)
+                            {
+                                <span class="k-pill">Not set up</span>
+                                <a asp-action="LearnerAccount" asp-route-learnerId="@c.LearnerId" class="ms-auto small fw-semibold">Create login</a>
+                            }
+                            else
+                            {
+                                <span class="k-pill @(c.LoginEnabled ? "ok" : "danger")">@(c.LoginEnabled ? "Active" : "Disabled")</span>
+                                <a asp-action="LearnerAccount" asp-route-learnerId="@c.LearnerId" class="ms-auto small fw-semibold">Reset password</a>
+                                <form asp-action="SetLearnerAccess" method="post" class="d-inline m-0">
+                                    <input type="hidden" name="learnerId" value="@c.LearnerId" />
+                                    <input type="hidden" name="enabled" value="@(c.LoginEnabled ? "false" : "true")" />
+                                    <button type="submit" class="btn btn-link btn-sm p-0 small fw-semibold @(c.LoginEnabled ? "text-danger" : "text-success")">@(c.LoginEnabled ? "Disable" : "Enable")</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="k-sub my-3">
+                            @(c.ApplicationStatus == "Approved" ? "Approved — waiting for the school to enrol." : c.ApplicationStatus == "Rejected" ? "This application was not successful." : c.ApplicationId > 0 ? "Your application is being reviewed." : "No application yet.")
+                        </div>
+                        <div class="mt-auto">
+                            @if (c.ApplicationId > 0)
+                            {
+                                <a asp-action="ApplicationDetail" asp-route-id="@c.ApplicationId" class="k-btn k-btn-ghost k-btn-sm"><i class="bi bi-eye"></i>View application</a>
+                            }
+                            else
+                            {
+                                <a asp-action="Apply" class="k-btn k-btn-primary k-btn-sm"><i class="bi bi-plus-circle"></i>Apply now</a>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+    <div class="k-sub text-center mt-3" id="noLearnerMatch" hidden>No learners match.</div>
+    <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="learnerGrid"><i class="bi bi-chevron-down"></i>See <span data-more-count>9</span> more learners</button></div>
+}
+
+@section Scripts {
+<script>
+(function () {
+    let filter = 'all';
+    const search = document.getElementById('learnerSearch');
+    function apply() {
+        const q = (search?.value || '').trim().toLowerCase();
+        const filtering = q || filter !== 'all';
+        let shown = 0;
+        document.querySelectorAll('#learnerGrid [data-more-item]').forEach(el => {
+            const okFilter = filter === 'all' || (filter === 'owing' && el.dataset.owing === '1')
+                || (filter === 'attendance' && el.dataset.lowatt === '1') || (filter === 'pending' && el.dataset.pending === '1');
+            const match = okFilter && (!q || el.dataset.search.includes(q));
+            el.toggleAttribute('data-filtered-out', !match);
+            el.hidden = !match;
+            if (filtering && match) { el.classList.remove('k-more-hidden'); shown++; }
+        });
+        document.getElementById('noLearnerMatch').hidden = !filtering || shown > 0;
+        if (!filtering) window.kInitMore(document);
+        else document.querySelector('[data-more-btn="learnerGrid"]').hidden = true;
+    }
+    document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => {
+        document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('active', x === b));
+        filter = b.dataset.filter; apply();
+    }));
+    search?.addEventListener('input', apply);
+})();
+</script>
+}

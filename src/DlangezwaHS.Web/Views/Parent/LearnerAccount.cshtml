@@ -1,0 +1,78 @@
+@model LearnerAccountViewModel
+@{ ViewData["Title"] = Model.HasLogin ? "Reset Learner Password" : "Create Learner Login"; }
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-person-lock me-2"></i>@(Model.HasLogin ? "Reset password" : "Create login")</h2>
+        <p>@Model.LearnerName signs in with their Learner ID</p>
+    </div>
+    <a asp-action="Index" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Dashboard</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="k-card k-rise" style="--i:0">
+            <div class="d-flex gap-3 align-items-center p-3 mb-3" style="border-radius:16px;background:var(--dhs-light)">
+                <span class="k-avatar" aria-hidden="true"><i class="bi bi-person-badge"></i></span>
+                <div>
+                    <div class="k-label mb-0">Learner ID (username)</div>
+                    <code class="fs-5" style="color:var(--dhs-navy)">@Model.LearnerIdNumber</code>
+                </div>
+            </div>
+            <p class="k-sub">They'll be able to see their timetable, marks, attendance and activities, view the menu, pre-order meals and update their dietary profile (you're emailed when they do). Payments and applications stay with you.</p>
+
+            @if (Model.HasLogin && !Model.IsEnabled)
+            {
+                <div class="alert alert-warning small py-2" style="border-radius:14px">This login is currently <strong>disabled</strong>. Resetting the password doesn't re-enable it.</div>
+            }
+
+            <form asp-action="LearnerAccount" method="post" data-busy>
+                <input asp-for="LearnerId" type="hidden" />
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small"></div>
+                @if (!Model.HasLogin)
+                {
+                    <div class="mb-3">
+                        <label asp-for="Email" class="k-label"></label>
+                        <input asp-for="Email" class="form-control k-input" type="email" placeholder="Leave blank if your child has no email" />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+                }
+                <div class="mb-3">
+                    <label asp-for="Password" class="k-label">@(Model.HasLogin ? "New password" : "Password")</label>
+                    <div class="input-group">
+                        <input asp-for="Password" class="form-control k-input" style="border-radius:12px 0 0 12px !important" />
+                        <button type="button" class="k-btn k-btn-ghost" style="border-radius:0 12px 12px 0" data-toggle-pw="Password" aria-label="Show password"><i class="bi bi-eye"></i></button>
+                    </div>
+                    <div class="k-sub mt-1" id="pwHint">At least 8 characters with an uppercase letter, a digit and a symbol.</div>
+                    <span asp-validation-for="Password" class="text-danger small"></span>
+                </div>
+                <div class="mb-4">
+                    <label asp-for="ConfirmPassword" class="k-label"></label>
+                    <input asp-for="ConfirmPassword" class="form-control k-input" />
+                    <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="k-btn k-btn-primary" data-busy-text="Saving…"><i class="bi bi-check-circle"></i>@(Model.HasLogin ? "Reset password" : "Create login")</button>
+                    <a asp-action="Index" class="k-btn k-btn-ghost">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+<script>
+    document.querySelectorAll('[data-toggle-pw]').forEach(b => b.addEventListener('click', () => {
+        const input = document.getElementById(b.dataset.togglePw), show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        b.innerHTML = `<i class="bi ${show ? 'bi-eye-slash' : 'bi-eye'}"></i>`;
+    }));
+    const pw = document.getElementById('Password'), hint = document.getElementById('pwHint');
+    pw.addEventListener('input', () => {
+        const v = pw.value, ok = v.length >= 8 && /[A-Z]/.test(v) && /\d/.test(v) && /[^A-Za-z0-9]/.test(v);
+        hint.style.color = !v ? '' : ok ? '#059669' : '#b45309';
+        hint.textContent = !v ? 'At least 8 characters with an uppercase letter, a digit and a symbol.' : ok ? '✓ Strong enough' : 'Needs 8+ characters, an uppercase letter, a digit and a symbol.';
+    });
+</script>
+}

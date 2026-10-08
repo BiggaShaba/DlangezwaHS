@@ -1,0 +1,84 @@
+@model IList<Activity>
+@{
+    ViewData["Title"] = "Activities";
+    var isParent = User.IsInRole("Parent");
+    var myLearners = isParent ? (ViewBag.MyLearners as IList<Learner>) ?? new List<Learner>() : new List<Learner>();
+    var registrations = isParent ? (ViewBag.Registrations as List<(int ActivityId, int LearnerId)>) ?? new List<(int, int)>() : new List<(int, int)>();
+}
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-trophy me-2"></i>Activities</h2></div>
+    @if (User.IsInRole("Admin"))
+    {
+        <a asp-action="ActivityCreate" class="btn btn-dhs-primary"><i class="bi bi-plus-circle me-1"></i>Schedule Activity</a>
+    }
+</div>
+
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex align-items-center gap-2">
+            <label class="form-label small mb-0">Type:</label>
+            <select name="type" class="form-select form-select-sm" style="max-width:220px;" onchange="this.form.submit()">
+                <option value="">All Types</option>
+                @foreach (var t in Enum.GetValues<ActivityType>())
+                { <option value="@t" selected="@(ViewBag.TypeFilter?.ToString() == t.ToString())">@t</option> }
+            </select>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (Model is null || !Model.Any())
+        {
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-trophy fs-1 d-block mb-2" style="color:#97C8E9;"></i>
+                No activities scheduled yet.
+            </div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>Name</th><th>Type</th><th>Venue</th><th>Time</th><th>Target Group</th><th>Coach</th><th>Spots</th>@if (isParent){<th></th>}</tr></thead>
+                <tbody>
+                @foreach (var a in Model)
+                {
+                    var registeredCount = a.Registrations?.Count(r => r.Status == RegistrationStatus.Registered) ?? 0;
+                    var coachNames = (a.Coaches ?? new List<ActivityCoach>())
+                        .Where(c => c.IsActive && c.Teacher != null)
+                        .Select(c => c.Teacher.FullName);
+                    <tr>
+                        <td><strong>@a.Name</strong></td>
+                        <td>@a.Type</td>
+                        <td>@(a.Venue ?? "—")</td>
+                        <td><small>@a.StartTime.ToString(@"hh\:mm")–@a.EndTime.ToString(@"hh\:mm")</small></td>
+                        <td>@a.TargetGroupLabel</td>
+                        <td>@string.Join(", ", coachNames)</td>
+                        <td>@registeredCount / @a.MaxParticipants</td>
+                        @if (isParent)
+                        {
+                            <td>
+                                @if (myLearners.Any())
+                                {
+                                    <form asp-action="Register" method="post" class="d-flex gap-1">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="activityId" value="@a.Id" />
+                                        <select name="learnerId" class="form-select form-select-sm" style="max-width:160px;">
+                                            @foreach (var l in myLearners)
+                                            {
+                                                var already = registrations.Contains((a.Id, l.Id));
+                                                <option value="@l.Id">@l.FullName @(already ? "✓" : "")</option>
+                                            }
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-dhs-primary" @(a.RegistrationOpen ? "" : "disabled")>Register</button>
+                                    </form>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

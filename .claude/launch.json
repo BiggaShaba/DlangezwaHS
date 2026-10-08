@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dlangezwa-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/DlangezwaHS.Web", "--urls", "http://localhost:5230"],
+      "port": 5230
+    }
+  ]
+}

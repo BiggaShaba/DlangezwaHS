@@ -1,0 +1,119 @@
+﻿@using DlangezwaHS.Web.Models.Domain
+@model EventTicket
+@{
+    ViewData["Title"] = "My Event Ticket";
+}
+
+<style>
+    .ticket-wrap {
+        max-width: 420px;
+        margin: 2rem auto;
+    }
+
+    .ticket-card {
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0,0,0,.15);
+        background: #fff;
+        border: 1px solid #e5e7eb;
+    }
+
+    .ticket-top {
+        background: #1e3a5f;
+        padding: 28px 32px;
+        color: #fff;
+        text-align: center;
+    }
+
+        .ticket-top h4 {
+            margin: 0 0 4px;
+            font-weight: 800;
+            font-size: 1.3rem;
+        }
+
+        .ticket-top p {
+            margin: 0;
+            color: #93c5fd;
+            font-size: .85rem;
+        }
+
+    .ticket-body {
+        padding: 28px 32px;
+        text-align: center;
+    }
+
+        .ticket-body img {
+            width: 220px;
+            height: 220px;
+            border: 4px solid #1e3a5f;
+            border-radius: 12px;
+        }
+
+    .ticket-hash {
+        font-family: monospace;
+        font-size: .7rem;
+        color: #9ca3af;
+        word-break: break-all;
+        margin-top: 8px;
+    }
+
+    .ticket-warn {
+        background: #fef3c7;
+        border: 1px solid #f59e0b;
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: .78rem;
+        color: #92400e;
+        margin-top: 16px;
+    }
+
+    .ticket-status {
+        display: inline-block;
+        border-radius: 20px;
+        padding: 4px 14px;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+</style>
+
+<div class="ticket-wrap">
+    <div class="ticket-card">
+        <div class="ticket-top">
+            <h4>🎫 Your Event Ticket</h4>
+            <p>Dlangezwa High School</p>
+        </div>
+        <div class="ticket-body">
+            @{
+                var status = Model.Status == TicketStatus.Unused ? "Unused" :
+                Model.Status == TicketStatus.Used ? "Used" : "Cancelled";
+                var statusColor = Model.Status == TicketStatus.Unused ? "bg-success" :
+                Model.Status == TicketStatus.Used ? "bg-secondary" : "bg-danger";
+            }
+            <span class="ticket-status @statusColor text-white mb-3 d-inline-block">@status</span>
+
+            @if (Model.Status == TicketStatus.Unused)
+            {
+                <br />
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=@Uri.EscapeDataString(Model.Hash)"
+                     alt="Your QR Ticket" />
+                <div class="ticket-hash">@Model.Hash</div>
+                <div class="ticket-warn">
+                    ⚠️ This QR code is unique to you and can only be scanned <strong>once</strong>.
+                    Do not share it.
+                </div>
+            }
+            else if (Model.Status == TicketStatus.Used)
+            {
+                <p class="text-muted">This ticket was used on @Model.UsedAt?.ToString("HH:mm, dd MMMM yyyy").</p>
+            }
+            else
+            {
+                <p class="text-muted">This ticket has been cancelled.</p>
+            }
+
+            <div class="mt-3 text-muted small">
+                Issued: @Model.IssuedAt.ToString("dd MMM yyyy HH:mm")
+            </div>
+        </div>
+    </div>
+</div>

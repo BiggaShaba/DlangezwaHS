@@ -1,0 +1,191 @@
+@model ApplicationDetailViewModel
+@{
+    ViewData["Title"] = $"Application #{Model.Application.Id}";
+    var app = Model.Application;
+    var learner = app.Learner!;
+    var parent  = app.Parent;
+    var auditLogs = ViewBag.AuditLogs as List<AuditLog> ?? new();
+}
+
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Applications">Applications</a></li>
+            <li class="breadcrumb-item active">#@app.Id</li>
+        </ol>
+    </nav>
+    <h2><i class="bi bi-file-earmark-person me-2"></i>Application #@app.Id</h2>
+    <p>@learner.FullName — submitted @app.SubmittedAt.ToString("dd MMM yyyy HH:mm")</p>
+</div>
+
+<div class="row g-4">
+    <!-- Main detail -->
+    <div class="col-lg-8">
+        <!-- Status Banner -->
+        <div class="alert @(app.Status == ApplicationStatus.Pending ? "alert-warning" : app.Status == ApplicationStatus.Approved || app.Status == ApplicationStatus.Enrolled ? "alert-success" : "alert-danger") d-flex align-items-center gap-2 mb-4">
+            <i class="bi @(app.Status == ApplicationStatus.Pending ? "bi-hourglass-split" : app.Status == ApplicationStatus.Approved || app.Status == ApplicationStatus.Enrolled ? "bi-check-circle-fill" : "bi-x-circle-fill") fs-5"></i>
+            <div>
+                <strong>Status: @app.Status</strong>
+                @if (app.ReviewedAt.HasValue) { <small class="ms-2 opacity-75">reviewed @app.ReviewedAt.Value.ToString("dd MMM yyyy")</small> }
+                @if (app.Status == ApplicationStatus.Rejected && !string.IsNullOrEmpty(app.RejectionReason))
+                {
+                    <div class="mt-1 small"><strong>Reason:</strong> @app.RejectionReason</div>
+                }
+            </div>
+        </div>
+
+        <!-- Learner Details -->
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-person me-2"></i>Learner Details</h5></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    @foreach (var (label, val) in new[]{
+                        ("Full Name",    learner.FullName),
+                        ("ID / Passport",learner.LearnerIdNumber),
+                        ("Date of Birth",learner.DateOfBirth.ToString("dd MMM yyyy")),
+                        ("Gender",       learner.Gender)
+                    })
+                    {
+                        <div class="col-md-6">
+                            <div class="small text-muted">@label</div>
+                            <div class="fw-semibold">@val</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Parent / Guardian -->
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-people me-2"></i>Parent / Guardian</h5></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6"><div class="small text-muted">Name</div><div class="fw-semibold">@(parent?.FullName ?? "—")</div></div>
+                    <div class="col-md-6"><div class="small text-muted">Email</div><div class="fw-semibold">@(parent?.Email ?? "—")</div></div>
+                    <div class="col-md-6"><div class="small text-muted">Phone</div><div class="fw-semibold">@(parent?.Phone ?? "—")</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents -->
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-paperclip me-2"></i>Uploaded Documents</h5></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    @foreach (var (label, path) in new[]{
+                        ("Learner ID / Passport", app.LearnerIdDocPath),
+                        ("Previous School Report", app.PreviousReportDocPath),
+                        ("Guardian ID",            app.GuardianIdDocPath)
+                    })
+                    {
+                        <div class="col-md-4 text-center">
+                            <div class="border rounded p-3" style="background:#f8fafc;">
+                                <i class="bi bi-file-earmark-text fs-2" style="color:#97C8E9;"></i>
+                                <div class="small fw-semibold mt-1">@label</div>
+                                @if (!string.IsNullOrEmpty(path))
+                                {
+                                    <a href="@path" target="_blank" class="btn btn-sm btn-outline-secondary mt-2">
+                                        <i class="bi bi-eye me-1"></i>View
+                                    </a>
+                                }
+                                else
+                                {
+                                    <div class="text-muted small mt-1">Not uploaded</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions Sidebar -->
+    <div class="col-lg-4">
+        <!-- Action Buttons -->
+        @if (app.Status == ApplicationStatus.Pending)
+        {
+            <div class="card mb-4 border-success">
+                <div class="card-header" style="background:#065f46;"><h5 class="mb-0 text-white"><i class="bi bi-check2-circle me-2"></i>Approve Application</h5></div>
+                <div class="card-body">
+                    <p class="small text-muted">Approving will notify the parent by email. The learner can then be enrolled.</p>
+                    <form asp-action="Approve" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@app.Id" />
+                        <button type="submit" class="btn btn-success w-100"
+                                data-confirm="Approve this application? An email will be sent to the parent.">
+                            <i class="bi bi-check-circle me-1"></i> Approve
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card mb-4 border-danger">
+                <div class="card-header" style="background:#991b1b;"><h5 class="mb-0 text-white"><i class="bi bi-x-circle me-2"></i>Reject Application</h5></div>
+                <div class="card-body">
+                    <form asp-action="Reject" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ApplicationId" value="@app.Id" />
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Rejection Reason <span class="text-danger">*</span></label>
+                            <textarea name="RejectionReason" class="form-control form-control-sm" rows="3"
+                                      placeholder="Provide a reason…" required minlength="10"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="bi bi-x-circle me-1"></i> Reject
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        @if (app.Status == ApplicationStatus.Approved)
+        {
+            <div class="card mb-4 border-primary">
+                <div class="card-header" style="background:#1e40af;"><h5 class="mb-0 text-white"><i class="bi bi-person-badge me-2"></i>Enrol Learner</h5></div>
+                <div class="card-body">
+                    <p class="small text-muted">Assign a class and subjects to enrol this learner.</p>
+                    <a asp-action="Enroll" asp-route-applicationId="@app.Id" class="btn btn-primary w-100">
+                        <i class="bi bi-journal-plus me-1"></i> Proceed to Enrolment
+                    </a>
+                </div>
+            </div>
+        }
+
+        @if (app.Status == ApplicationStatus.Enrolled)
+        {
+            <div class="alert alert-success">
+                <i class="bi bi-check2-all me-2"></i>Learner has been enrolled.
+                <a asp-action="Enrollments" class="d-block mt-2 small">View Enrollments →</a>
+            </div>
+        }
+
+        <!-- Audit Trail -->
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Audit Trail</h5></div>
+            <div class="card-body p-3">
+                @if (!auditLogs.Any())
+                {
+                    <p class="text-muted small mb-0">No activity recorded.</p>
+                }
+                else
+                {
+                    <div class="timeline">
+                        @foreach (var log in auditLogs)
+                        {
+                            <div class="timeline-item">
+                                <div class="small fw-semibold">@log.Action</div>
+                                <div class="text-muted" style="font-size:.75rem;">
+                                    @log.UserName — @log.Timestamp.ToString("dd MMM yyyy HH:mm")
+                                </div>
+                                @if (!string.IsNullOrEmpty(log.Details))
+                                {
+                                    <div class="text-muted" style="font-size:.75rem;">@log.Details</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

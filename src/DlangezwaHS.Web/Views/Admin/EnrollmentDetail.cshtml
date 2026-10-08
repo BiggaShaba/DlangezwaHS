@@ -1,0 +1,203 @@
+@model Enrollment
+@{
+    ViewData["Title"] = $"Enrollment – {Model.Learner?.FullName}";
+    var allocation = ViewBag.Allocation as RoomAllocation;
+    var payments   = ViewBag.Payments  as List<Payment> ?? new();
+    var proofs     = ViewBag.Proofs    as List<RegistrationProof> ?? new();
+    var regPaid    = payments.Any(p => p.Type == PaymentType.Registration  && p.Status == PaymentStatus.Completed);
+    var accPaid    = payments.Any(p => p.Type == PaymentType.Accommodation && p.Status == PaymentStatus.Completed);
+}
+
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Enrollments">Enrollments</a></li>
+            <li class="breadcrumb-item active">@Model.Learner?.FullName</li>
+        </ol>
+    </nav>
+    <h2><i class="bi bi-person-badge me-2"></i>Enrollment #@Model.Id</h2>
+    <p>@Model.Learner?.FullName — enrolled @Model.EnrolledAt.ToString("dd MMM yyyy")</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+
+        <!-- Academic info -->
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-journal-text me-2"></i>Academic Details</h5></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="small text-muted">Class</div>
+                        <div class="fw-bold fs-5" style="color:#0B2A4A;">@Model.Class?.DisplayName</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-muted">Learner ID</div>
+                        <div class="fw-semibold">@Model.Learner?.LearnerIdNumber</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-muted">Parent Email</div>
+                        <div class="fw-semibold">@Model.Learner?.Parent?.Email</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="small text-muted mb-1">Subjects</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var es in Model.EnrollmentSubjects)
+                            {
+                                <span class="badge rounded-pill" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;">
+                                    @es.Subject?.Name
+                                </span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accommodation -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-building me-2"></i>Accommodation</h5>
+                @if (allocation is null)
+                {
+                    <a asp-action="AllocateBed" asp-route-learnerId="@Model.LearnerId" class="btn btn-sm btn-dhs-secondary">
+                        <i class="bi bi-plus"></i> Allocate Bed
+                    </a>
+                }
+            </div>
+            <div class="card-body">
+                @if (allocation is not null)
+                {
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <div class="small text-muted">Room</div>
+                            <div class="fw-semibold">@allocation.Room?.Name</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="small text-muted">Bed</div>
+                            <div class="fw-semibold">@allocation.Bed?.BedNumber</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="small text-muted">Allocated</div>
+                            <div class="fw-semibold">@allocation.AllocatedAt.ToString("dd MMM yyyy")</div>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="badge badge-available rounded-pill">Active</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>No accommodation allocated yet.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Payments -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-credit-card me-2"></i>Payments</h5>
+                <a asp-action="RecordPayment" asp-route-learnerId="@Model.LearnerId"
+                   class="btn btn-sm btn-dhs-secondary">
+                    <i class="bi bi-plus"></i> Record Payment
+                </a>
+            </div>
+            <div class="card-body p-0">
+                @if (!payments.Any())
+                {
+                    <div class="p-3 text-muted small"><i class="bi bi-info-circle me-1"></i>No payments recorded.</div>
+                }
+                else
+                {
+                    <table class="table table-dhs mb-0 small">
+                        <thead><tr><th>Type</th><th>Amount</th><th>Method</th><th>Reference</th><th>Date</th><th>Status</th></tr></thead>
+                        <tbody>
+                        @foreach (var p in payments)
+                        {
+                            <tr>
+                                <td>@p.Type</td>
+                                <td><strong>R@(p.Amount.ToString("N2"))</strong></td>
+                                <td>@p.Method</td>
+                                <td><code>@(p.ProviderRef ?? p.BankRef ?? "-")</code></td>
+                                <td>@(p.PaidAt.HasValue ? p.PaidAt.Value.ToString("dd MMM yyyy") : "-")</td>
+                                <td><span class="badge @(p.Status == PaymentStatus.Completed ? "badge-approved" : p.Status == PaymentStatus.Pending ? "badge-pending" : "badge-rejected") rounded-pill">@p.Status</span></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+
+        <!-- Proof of Registration -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-pdf me-2"></i>Proof of Registration</h5>
+                @if (regPaid)
+                {
+                    <form asp-action="GenerateProof" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="enrollmentId" value="@Model.Id" />
+                        <button type="submit" class="btn btn-sm btn-dhs-primary">
+                            <i class="bi bi-file-earmark-pdf me-1"></i> Generate & Email
+                        </button>
+                    </form>
+                }
+            </div>
+            <div class="card-body p-0">
+                @if (!proofs.Any())
+                {
+                    <div class="p-3 text-muted small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        @(regPaid ? "No proof generated yet. Click 'Generate & Email' above." : "Registration fee must be paid before generating proof.")
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-dhs mb-0 small">
+                        <thead><tr><th>Generated</th><th>Email Sent</th><th></th></tr></thead>
+                        <tbody>
+                        @foreach (var pr in proofs)
+                        {
+                            <tr>
+                                <td>@pr.GeneratedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                <td>@(pr.EmailSent ? "✅ Yes" : "⏳ No")</td>
+                                <td>
+                                    <a href="@pr.PdfPath" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-download me-1"></i> Download
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary sidebar -->
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Workflow Status</h5></div>
+            <div class="card-body">
+                @{
+                    void StatusRow(string icon, string label, bool done) {
+                        <div class="d-flex align-items-center gap-2 py-2 border-bottom">
+                            <span class="@(done ? "text-success" : "text-muted")"><i class="bi @icon"></i></span>
+                            <span class="small @(done ? "fw-semibold" : "text-muted")">@label</span>
+                            @if (done) { <span class="ms-auto badge bg-success rounded-pill small">Done</span> }
+                            else       { <span class="ms-auto badge bg-light text-muted rounded-pill small border">Pending</span> }
+                        </div>
+                    }
+                }
+                @{ StatusRow("bi-file-earmark-check",  "Application Approved", true); }
+                @{ StatusRow("bi-person-badge",         "Enrolled in Class",   true); }
+                @{ StatusRow("bi-building",             "Bed Allocated",       allocation is not null); }
+                @{ StatusRow("bi-cash-coin",            "Registration Paid",   regPaid); }
+                @{ StatusRow("bi-house-door",           "Accommodation Paid",  accPaid); }
+                @{ StatusRow("bi-file-earmark-pdf",     "Proof Generated",     proofs.Any()); }
+            </div>
+        </div>
+    </div>
+</div>

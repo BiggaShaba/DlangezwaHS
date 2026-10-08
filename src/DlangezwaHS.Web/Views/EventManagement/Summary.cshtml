@@ -1,0 +1,170 @@
+﻿@using DlangezwaHS.Web.Services
+@model EventSummaryDto
+@{
+    ViewData["Title"] = "Event Summary";
+    double budget = (double)Model.Budget;
+    double spend = (double)Model.ActualSpend;
+    double budgetUsedPct = budget > 0 ? Math.Min(spend / budget * 100, 100) : 0;
+}
+
+<style>
+    .sum-header {
+        background: #1e3a5f;
+        color: #fff;
+        border-radius: 12px;
+        padding: 28px 32px;
+        margin-bottom: 2rem;
+    }
+
+        .sum-header h3 {
+            margin: 0;
+            font-weight: 800;
+        }
+
+        .sum-header p {
+            margin: 4px 0 0;
+            color: #93c5fd;
+        }
+
+    .sum-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,.05);
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+
+        .sum-card h6 {
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 14px 20px;
+            margin: 0;
+            font-weight: 600;
+            font-size: .88rem;
+            color: #1e3a5f;
+        }
+
+        .sum-card .body {
+            padding: 20px;
+        }
+
+    .big-stat {
+        text-align: center;
+    }
+
+        .big-stat .num {
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: #1e3a5f;
+        }
+
+        .big-stat .lbl {
+            font-size: .75rem;
+            color: #6b7280;
+        }
+
+    .timeline-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 7px 0;
+        border-bottom: 1px solid #f3f4f6;
+        font-size: .8rem;
+    }
+
+        .timeline-item:last-child {
+            border: none;
+        }
+</style>
+
+<div class="sum-header d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+        <h3>📊 @Model.EventTitle</h3>
+        <p>@Model.EventDate.ToString("dddd, dd MMMM yyyy") &nbsp;|&nbsp; @Model.Venue</p>
+    </div>
+    <a href="@Url.Action("Manage", "EventManagement", new { calendarEventId = 0 })"
+       class="btn btn-outline-light btn-sm">← Back to Event</a>
+</div>
+
+<div class="row g-4">
+    <!-- Attendance stats -->
+    <div class="col-lg-8">
+        <div class="sum-card">
+            <h6>Participation Overview</h6>
+            <div class="body">
+                <div class="row g-3 mb-4">
+                    <div class="col-4"><div class="big-stat"><div class="num">@Model.TotalRSVPs</div><div class="lbl">RSVPs</div></div></div>
+                    <div class="col-4"><div class="big-stat"><div class="num">@Model.TotalScanned</div><div class="lbl">Checked In</div></div></div>
+                    <div class="col-4"><div class="big-stat"><div class="num">@Model.AttendanceRate%</div><div class="lbl">Attendance Rate</div></div></div>
+                </div>
+                <label class="small text-muted mb-1">Attendance vs Capacity (@Model.TotalScanned / @Model.MaxParticipants)</label>
+                <div class="progress" style="height:14px;border-radius:8px">
+                    <div class="progress-bar bg-success" style="width:@Model.AttendanceRate%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sum-card">
+            <h6>Budget</h6>
+            <div class="body">
+                <div class="row g-3 mb-3">
+                    <div class="col-4"><div class="big-stat"><div class="num">R @Model.Budget.ToString("N0")</div><div class="lbl">Budget</div></div></div>
+                    <div class="col-4"><div class="big-stat"><div class="num">R @Model.ActualSpend.ToString("N0")</div><div class="lbl">Actual Spend</div></div></div>
+                    <div class="col-4">
+                        <div class="big-stat">
+                            <div class="num" style="color:@(spend <= budget ? "#10b981" : "#ef4444")">
+                                R @(Math.Abs(budget - spend).ToString("N0"))
+                            </div>
+                            <div class="lbl">@(spend <= budget ? "Under Budget" : "Over Budget")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="progress" style="height:14px;border-radius:8px">
+                    <div class="progress-bar @(budgetUsedPct >= 100 ? "bg-danger" : "bg-primary")"
+                         style="width:@budgetUsedPct%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scan timeline -->
+        <div class="sum-card">
+            <h6>Recent Check-ins</h6>
+            <div class="body p-0 px-3">
+                @if (!Model.ScanTimeline.Any())
+                {
+                    <p class="text-muted small py-3 text-center">No check-ins recorded yet.</p>
+                }
+                @foreach (var s in Model.ScanTimeline)
+                {
+                    <div class="timeline-item">
+                        <span>@s.OwnerName</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge @(s.Result == ScanResult.Valid ? "bg-success" : s.Result == ScanResult.AlreadyUsed ? "bg-warning text-dark" : "bg-danger")">
+                                @s.Result
+                            </span>
+                            <span class="text-muted">@s.Time.ToString("HH:mm")</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Coordinators -->
+    <div class="col-lg-4">
+        <div class="sum-card">
+            <h6>Coordinators</h6>
+            <div class="body p-0">
+                @foreach (var c in Model.Coordinators)
+                {
+                    <div class="d-flex flex-column px-4 py-3 border-bottom">
+                        <span class="fw-semibold small">@c.Name</span>
+                        <span class="badge bg-secondary mt-1" style="width:fit-content">@c.Role</span>
+                        <span class="text-muted" style="font-size:.72rem">@c.Email</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

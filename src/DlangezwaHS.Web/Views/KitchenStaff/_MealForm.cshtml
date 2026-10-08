@@ -1,0 +1,148 @@
+@model MealEditViewModel
+@*
+    Fields for creating/editing a library meal. The caller supplies the surrounding
+    <form enctype="multipart/form-data"> so this can be used in a page or a modal.
+*@
+@{
+    var rows = Model.Ingredients.Any() ? Model.Ingredients : new List<MealIngredientInput> { new() };
+    var unitsJson = System.Text.Json.JsonSerializer.Serialize(Model.IngredientOptions.ToDictionary(i => i.Id.ToString(), i => i.Unit));
+}
+
+<style>
+    .meal-photo-box { width: 100%; height: 180px; border-radius: 10px; overflow: hidden; background: #f1f5f9; }
+    .meal-photo-box img { width: 100%; height: 100%; object-fit: cover; }
+    .meal-photo-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; color: #94a3b8; }
+    .meal-photo-empty i { font-size: 2.5rem; }
+</style>
+
+<div data-meal-form data-units="@unitsJson">
+    <input type="hidden" name="Id" value="@Model.Id" />
+    <div class="row g-2 mb-2">
+        <div class="col-md-8">
+            <label class="form-label small">Meal name</label>
+            <input name="Name" value="@Model.Name" class="form-control form-control-sm" placeholder="e.g. Pap &amp; beef stew" required maxlength="200" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small">Usually served for</label>
+            <select name="MealType" class="form-select form-select-sm">
+                @foreach (var t in Enum.GetValues<MealType>())
+                {
+                    <option value="@t" selected="@(Model.MealType == t)">@t</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="mb-2">
+        <label class="form-label small">Prep time per serving <span class="text-muted">(minutes of kitchen work per plate — used to work out how many staff are needed)</span></label>
+        <div class="input-group input-group-sm" style="max-width:220px;">
+            <input type="number" name="PrepMinutesPerServing" value="@Model.PrepMinutesPerServing.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)" step="0.1" min="0.1" max="60" class="form-control" required aria-label="Prep minutes per serving" />
+            <span class="input-group-text">min</span>
+        </div>
+    </div>
+
+    <div class="mb-2">
+        <label class="form-label small">Description <span class="text-muted">(shown to parents)</span></label>
+        <textarea name="Description" class="form-control form-control-sm" rows="2" maxlength="1000" placeholder="Short description of the dish">@Model.Description</textarea>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label small">Photo <span class="text-danger">*</span> <span class="text-muted">(JPG, PNG, WEBP or GIF, under 5 MB)</span></label>
+        <div class="meal-photo-box mb-2">
+            <img data-image-preview src="@Model.ExistingImageUrl" alt="Meal photo preview" hidden="@string.IsNullOrEmpty(Model.ExistingImageUrl)" />
+            <div data-image-placeholder class="meal-photo-empty" hidden="@(!string.IsNullOrEmpty(Model.ExistingImageUrl))">
+                <i class="bi bi-image"></i><span>No photo chosen yet</span>
+            </div>
+        </div>
+        <input type="file" name="Image" accept=".jpg,.jpeg,.png,.webp,.gif" class="form-control form-control-sm" data-image-input
+               required="@string.IsNullOrEmpty(Model.ExistingImageUrl)" />
+        @if (!string.IsNullOrEmpty(Model.ExistingImageUrl))
+        {
+            <div class="form-text">Leave empty to keep the current photo.</div>
+        }
+    </div>
+
+    <label class="form-label small mb-1">Ingredients used <strong>per serving</strong></label>
+    <p class="small text-muted mb-2">
+        How much of each ingredient one learner's plate uses (e.g. 3 onions for 20 learners ≈ 0.15 Units each).
+        These amounts are deducted from inventory automatically when the meal is served.
+    </p>
+    <div data-ingredient-rows>
+        @for (int i = 0; i < rows.Count; i++)
+        {
+            <div class="row g-2 mb-2 align-items-center" data-ingredient-row>
+                <div class="col-6">
+                    <select name="Ingredients[@i].IngredientId" class="form-select form-select-sm" data-ingredient-select aria-label="Ingredient">
+                        <option value="">Choose ingredient…</option>
+                        @foreach (var opt in Model.IngredientOptions)
+                        {
+                            <option value="@opt.Id" selected="@(rows[i].IngredientId == opt.Id)">@opt.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-4">
+                    <div class="input-group input-group-sm">
+                        <input type="number" step="0.001" min="0" name="Ingredients[@i].QuantityPerServing" value="@(rows[i].QuantityPerServing == 0 ? "" : rows[i].QuantityPerServing.ToString("0.###"))" class="form-control" placeholder="Qty" aria-label="Quantity per serving" />
+                        <span class="input-group-text" data-unit-label>—</span>
+                    </div>
+                </div>
+                <div class="col-2">
+                    <button type="button" class="btn btn-sm btn-outline-danger w-100" data-remove-ingredient aria-label="Remove ingredient"><i class="bi bi-x-lg"></i></button>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="d-flex justify-content-between align-items-center">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-add-ingredient><i class="bi bi-plus me-1"></i>Add ingredient</button>
+        <a asp-action="Inventory" target="_blank" class="small">Ingredient missing? Add it in Inventory <i class="bi bi-box-arrow-up-right"></i></a>
+    </div>
+</div>
+
+<script>
+    window.initMealForm = window.initMealForm || function (root) {
+        if (root.dataset.initialised) return;
+        root.dataset.initialised = '1';
+        const units = JSON.parse(root.dataset.units || '{}');
+        const rowsEl = root.querySelector('[data-ingredient-rows]');
+
+        const refreshUnits = () => rowsEl.querySelectorAll('[data-ingredient-row]').forEach(row => {
+            const id = row.querySelector('[data-ingredient-select]').value;
+            row.querySelector('[data-unit-label]').textContent = units[id] || '—';
+        });
+        const reindex = () => rowsEl.querySelectorAll('[data-ingredient-row]').forEach((row, i) =>
+            row.querySelectorAll('[name]').forEach(el => el.name = el.name.replace(/Ingredients\[\d+\]/, `Ingredients[${i}]`)));
+
+        rowsEl.addEventListener('change', e => { if (e.target.matches('[data-ingredient-select]')) refreshUnits(); });
+        rowsEl.addEventListener('click', e => {
+            const btn = e.target.closest('[data-remove-ingredient]');
+            if (!btn) return;
+            const all = rowsEl.querySelectorAll('[data-ingredient-row]');
+            if (all.length > 1) btn.closest('[data-ingredient-row]').remove();
+            else all[0].querySelectorAll('select, input').forEach(el => el.value = '');
+            reindex(); refreshUnits();
+        });
+        root.querySelector('[data-add-ingredient]').addEventListener('click', () => {
+            const clone = rowsEl.querySelector('[data-ingredient-row]').cloneNode(true);
+            clone.querySelectorAll('select, input').forEach(el => el.value = '');
+            rowsEl.appendChild(clone);
+            reindex(); refreshUnits();
+            clone.querySelector('select').focus();
+        });
+
+        const imgInput = root.querySelector('[data-image-input]');
+        const preview = root.querySelector('[data-image-preview]');
+        const placeholder = root.querySelector('[data-image-placeholder]');
+        const originalSrc = preview.getAttribute('src') || '';
+        imgInput.addEventListener('change', () => {
+            const f = imgInput.files[0];
+            preview.src = f ? URL.createObjectURL(f) : originalSrc;
+            preview.hidden = !f && !originalSrc;
+            placeholder.hidden = !preview.hidden;
+        });
+        // Called after the form is reset (e.g. the "New Meal" pop-up after saving)
+        root.resetImagePreview = () => { preview.src = originalSrc; preview.hidden = !originalSrc; placeholder.hidden = !!originalSrc; };
+
+        refreshUnits();
+    };
+    document.querySelectorAll('[data-meal-form]').forEach(el => window.initMealForm(el));
+</script>

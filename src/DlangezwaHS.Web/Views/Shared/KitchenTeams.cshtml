@@ -1,0 +1,176 @@
+@model KitchenTeamsViewModel
+@{
+    ViewData["Title"] = "Kitchen Teams";
+    var back = ViewBag.BackAction as string ?? "KitchenSchedule";
+    var active = Model.Teams.Where(t => t.IsActive).ToList();
+    var staffInTeams = active.SelectMany(t => t.MemberIds).Distinct().Count();
+    string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    bool CanEdit(KitchenTeamRow t) => Model.IsAdmin || t.HeadChefId == Model.HeadChefStaffId;
+}
+
+<style>
+    .kt-card { height: 100%; border-radius: 22px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); padding: 1.2rem 1.25rem; display: flex; flex-direction: column;
+        transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; position: relative; overflow: hidden; }
+    .kt-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: linear-gradient(90deg, var(--dhs-blue), var(--dhs-blue-dark), var(--dhs-navy-mid));
+        transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease-spring); }
+    .kt-card:hover { transform: translateY(-6px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    .kt-card:hover::before { transform: scaleX(1); }
+    .kt-card.inactive { opacity: .6; }
+    .kt-name { font-size: 1.15rem; font-weight: 700; color: var(--dhs-navy); margin: 0; }
+    .kt-chef { display: flex; align-items: center; gap: .6rem; padding: .6rem .75rem; border-radius: 14px; background: linear-gradient(135deg, #fef3c7, #fde68a); margin: .9rem 0; }
+    .kt-chef .k-avatar { background: linear-gradient(145deg, #f59e0b, #d97706); color: #fff; }
+    .kt-chef.none { background: var(--dhs-light); }
+    .kt-members { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
+    .kt-members .k-avatar { width: 34px; height: 34px; border-radius: 11px; font-size: .75rem; transition: transform .25s var(--ease-spring); }
+    .kt-members .k-avatar:hover { transform: translateY(-3px) scale(1.08); }
+    .kt-pick { display: flex; flex-wrap: wrap; gap: .4rem; max-height: 220px; overflow: auto; }
+    .kt-pick input { position: absolute; opacity: 0; pointer-events: none; }
+    .kt-pick span { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .8rem; border-radius: 99px; border: 1.5px solid #e2e8f0; background: #fff;
+        font-size: .85rem; font-weight: 600; color: var(--dhs-navy); cursor: pointer; transition: all .2s; }
+    .kt-pick span:hover { border-color: var(--dhs-blue-dark); background: var(--dhs-light); }
+    .kt-pick input:checked + span { background: var(--dhs-navy); border-color: var(--dhs-navy); color: #fff; }
+    .kt-pick input:focus-visible + span { outline: 3px solid var(--dhs-blue); outline-offset: 2px; }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-people me-2"></i>Kitchen Teams</h2>
+        <p>Each team has a head chef. A whole team can be scheduled for a meal in one step.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="@back" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Back</a>
+        <a asp-action="KitchenScheduleCreate" class="k-btn k-btn-light"><i class="bi bi-calendar-plus"></i>Schedule Teams</a>
+        <button type="button" class="k-btn k-btn-accent" data-team-new><i class="bi bi-plus-lg"></i>New Team</button>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-people"></i>Active teams</div><div class="k-stat-value" data-count="@active.Count">@active.Count</div><div class="k-stat-note">@(Model.Teams.Count - active.Count) inactive</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-award"></i>Head chefs</div><div class="k-stat-value" data-count="@active.Where(t => t.HeadChefId != null).Select(t => t.HeadChefId).Distinct().Count()">@active.Where(t => t.HeadChefId != null).Select(t => t.HeadChefId).Distinct().Count()</div><div class="k-stat-note">leading active teams</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-person-check"></i>Staff in teams</div><div class="k-stat-value" data-count="@staffInTeams">@staffInTeams</div><div class="k-stat-note">of @Model.AllStaff.Count kitchen staff</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat dinner"><div class="k-stat-label"><i class="bi bi-diagram-3"></i>Average size</div><div class="k-stat-value">@(active.Any() ? active.Average(t => t.MemberIds.Count).ToString("0.#") : "0")</div><div class="k-stat-note">staff per team</div></div></div>
+</div>
+
+@if (!Model.Teams.Any())
+{
+    <div class="k-empty"><i class="bi bi-people"></i><strong>No teams yet</strong><p>Create a team and choose its head chef.</p></div>
+}
+<div class="row g-3">
+    @foreach (var (t, i) in Model.Teams.Select((t, i) => (t, i)))
+    {
+        <div class="col-md-6 col-xl-4 k-rise" style="--i:@(i + 4)">
+            <div class="kt-card @(t.IsActive ? "" : "inactive")">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <h3 class="kt-name">@t.Name</h3>
+                    <span class="k-pill @(t.IsActive ? "ok" : "")">@(t.IsActive ? "Active" : "Inactive")</span>
+                </div>
+                <div class="kt-chef @(t.HeadChefName is null ? "none" : "")">
+                    @if (t.HeadChefName is null)
+                    {
+                        <i class="bi bi-person-dash fs-5" style="color:var(--dhs-grey)"></i><span class="k-sub">No head chef chosen</span>
+                    }
+                    else
+                    {
+                        <span class="k-avatar" aria-hidden="true">@Initials(t.HeadChefName)</span>
+                        <div><div class="k-label mb-0" style="color:#92400e">Head chef</div><div class="fw-bold" style="color:var(--dhs-navy)">@t.HeadChefName</div></div>
+                    }
+                </div>
+                <div class="k-label">@t.MemberNames.Count member(s)</div>
+                <div class="kt-members">
+                    @foreach (var m in t.MemberNames) { <span class="k-avatar" title="@m">@Initials(m)</span> }
+                </div>
+                <div class="d-flex gap-2 mt-auto">
+                    @if (CanEdit(t))
+                    {
+                        <button type="button" class="k-btn k-btn-ghost k-btn-sm flex-grow-1" data-team-edit data-id="@t.Id" data-name="@t.Name"
+                                data-chef="@t.HeadChefId" data-members="@string.Join(",", t.MemberIds)"><i class="bi bi-pencil"></i>Edit</button>
+                        <form method="post" asp-action="ToggleKitchenTeam" class="m-0" data-busy>
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@t.Id" />
+                            <button type="submit" class="k-btn k-btn-ghost k-btn-sm">@(t.IsActive ? "Deactivate" : "Activate")</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span class="k-sub"><i class="bi bi-lock me-1"></i>Only this team's head chef or an admin can edit it</span>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Create / edit team -->
+<div class="modal fade k-modal" id="teamModal" tabindex="-1" aria-labelledby="teamTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form asp-action="SaveKitchenTeam" method="post" id="teamForm" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="teamId" />
+                <div class="k-modal-head">
+                    <span class="k-bubble b1"></span><span class="k-bubble b2"></span><span class="k-bubble b3"></span>
+                    <h5 id="teamTitle">New Team</h5>
+                    <p>Name the team, choose its head chef and members</p>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="k-label" for="teamName">Team name</label>
+                    <input name="name" id="teamName" class="form-control k-input mb-3" placeholder="e.g. Morning Crew" required maxlength="100" />
+                    <label class="k-label" for="headChef">Head chef</label>
+                    <select name="headChefId" id="headChef" class="form-select k-select mb-3" @(Model.IsAdmin ? "" : "disabled")>
+                        @if (Model.IsAdmin) { <option value="">No head chef</option> }
+                        @foreach (var s in Model.AllStaff) { <option value="@s.Id" selected="@(s.Id == Model.HeadChefStaffId)">@s.Name</option> }
+                    </select>
+                    @if (!Model.IsAdmin)
+                    {
+                        <input type="hidden" name="headChefId" value="@Model.HeadChefStaffId" />
+                        <div class="k-sub mb-3" style="margin-top:-.6rem">You lead the teams you create.</div>
+                    }
+                    <span class="k-label">Members</span>
+                    @if (!Model.AllStaff.Any()) { <p class="k-sub">No kitchen staff registered yet.</p> }
+                    <div class="kt-pick">
+                        @foreach (var s in Model.AllStaff)
+                        {
+                            <label><input type="checkbox" name="memberIds" value="@s.Id" class="member-check" /><span><i class="bi bi-person"></i>@s.Name</span></label>
+                        }
+                    </div>
+                    <div class="text-danger small mt-2" id="teamError" hidden>Choose at least one member.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="k-btn k-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="k-btn k-btn-primary" data-busy-text="Saving…"><i class="bi bi-check2-circle"></i>Save Team</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const modal = document.getElementById('teamModal');
+    const chef = document.getElementById('headChef');
+    const myChefId = '@Model.HeadChefStaffId';
+    function open(data) {
+        document.getElementById('teamId').value = data ? data.id : '';
+        document.getElementById('teamName').value = data ? data.name : '';
+        document.getElementById('teamTitle').textContent = data ? 'Edit ' + data.name : 'New Team';
+        if (!chef.disabled) chef.value = data ? (data.chef || '') : '';
+        const members = data && data.members ? data.members.split(',') : (myChefId ? [myChefId] : []);
+        document.querySelectorAll('.member-check').forEach(c => c.checked = members.includes(c.value));
+        document.getElementById('teamError').hidden = true;
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+    document.querySelector('[data-team-new]').addEventListener('click', () => open(null));
+    document.querySelectorAll('[data-team-edit]').forEach(b => b.addEventListener('click', () => open(b.dataset)));
+    modal.addEventListener('shown.bs.modal', () => document.getElementById('teamName').focus());
+    // The head chef is always a member
+    chef.addEventListener('change', () => { const c = document.querySelector(`.member-check[value="${chef.value}"]`); if (c) c.checked = true; });
+    document.getElementById('teamForm').addEventListener('submit', e => {
+        const none = !document.querySelector('.member-check:checked');
+        document.getElementById('teamError').hidden = !none;
+        if (none) e.preventDefault();
+    }, true);
+})();
+</script>
+}

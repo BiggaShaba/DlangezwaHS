@@ -1,0 +1,85 @@
+@model ParentMealPlanWeekViewModel
+@{
+    ViewData["Title"] = Model.WeekOffset == 0 ? "This Week's Menu" : "Next Week's Menu";
+    var types = new[] { "Breakfast", "Lunch", "Dinner" };
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+}
+
+<style>
+    .mp-day { height: 100%; border-radius: 20px; background: #fff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-ambient); overflow: hidden;
+        transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring), border-color .25s; }
+    .mp-day:hover { transform: translateY(-5px); box-shadow: var(--shadow-hover); border-color: var(--dhs-blue); }
+    .mp-day.today { border: 2px solid var(--dhs-blue-dark); }
+    .mp-day.past { opacity: .6; }
+    .mp-day-head { display: flex; justify-content: space-between; align-items: center; padding: .8rem 1rem; border-bottom: 1px solid #f1f5f9; }
+    .mp-slot { padding: .7rem 1rem; }
+    .mp-slot + .mp-slot { border-top: 1px dashed #eef2f7; }
+    .mp-item { display: flex; align-items: center; gap: .6rem; margin-top: .45rem; }
+    .mp-item img, .mp-item .ph { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+    .mp-item .ph { display: grid; place-items: center; background: var(--dhs-light); color: var(--dhs-blue-dark); }
+    .mp-tabs { display: inline-flex; padding: 4px; border-radius: 14px; background: rgba(255,255,255,.14); gap: 4px; }
+    .mp-tabs a { padding: .42rem .95rem; border-radius: 10px; color: rgba(255,255,255,.85); font-weight: 600; text-decoration: none; font-size: .88rem; }
+    .mp-tabs a.active { background: #fff; color: var(--dhs-navy); }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-calendar3 me-2"></i>@(Model.WeekOffset == 0 ? "This Week's Menu" : "Next Week's Menu")</h2>
+        <p>@Model.WeekStartDate.ToString("ddd dd MMM") – @Model.WeekStartDate.AddDays(6).ToString("ddd dd MMM yyyy")</p>
+    </div>
+    <nav class="mp-tabs" aria-label="Week">
+        <a asp-action="MealPlan" asp-route-week="0" class="@(Model.WeekOffset == 0 ? "active" : "")">This week</a>
+        <a asp-action="MealPlan" asp-route-week="1" class="@(Model.WeekOffset == 1 ? "active" : "")">Next week@(Model.NextWeekPublished ? "" : " · not yet")</a>
+    </nav>
+</div>
+
+@if (!Model.HasPlan)
+{
+    <div class="k-empty k-rise"><i class="bi bi-calendar-x"></i><strong>No published menu for this week yet</strong>
+        @if (Model.WeekOffset == 0 && Model.NextWeekPublished) { <p><a asp-action="MealPlan" asp-route-week="1">See next week's menu</a></p> }</div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var (day, i) in Model.Days.Select((d, i) => (d, i)))
+        {
+            var isToday = day.Date == Model.Today;
+            <div class="col-md-6 col-xl-4 k-rise" style="--i:@i">
+                <div class="mp-day @(isToday ? "today" : "") @(day.Date < Model.Today ? "past" : "")">
+                    <div class="mp-day-head">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="k-date" style="width:44px;height:44px" aria-hidden="true"><span><b style="font-size:1rem">@day.Date.Day</b>@day.Date.ToString("MMM")</span></span>
+                            <span class="fw-bold" style="color:var(--dhs-navy)">@day.DayLabel</span>
+                        </div>
+                        @if (isToday) { <span class="badge bg-primary">Today</span> }
+                    </div>
+                    @if (!day.Meals.Any()) { <div class="mp-slot k-sub">No meals planned.</div> }
+                    @foreach (var slot in day.Meals.GroupBy(m => m.MealType.ToString()).OrderBy(g => Array.IndexOf(types, g.Key)))
+                    {
+                        <div class="mp-slot">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="k-meal @slot.Key.ToLowerInvariant()"><i class="bi @TypeIcon(slot.Key)"></i>@slot.Key</span>
+                                <span class="k-sub">@slot.First().ServingTime@(slot.Count() > 1 ? $" · {slot.Count()} options" : "")</span>
+                            </div>
+                            @foreach (var m in slot)
+                            {
+                                <div class="mp-item">
+                                    @if (!string.IsNullOrEmpty(m.Meal?.ImagePath)) { <img src="@m.Meal.ImagePath" alt="@m.MenuDescription" loading="lazy" /> }
+                                    else { <span class="ph"><i class="bi bi-egg-fried"></i></span> }
+                                    <div class="min-w-0">
+                                        <div class="fw-semibold text-truncate" style="color:var(--dhs-navy)">@m.MenuDescription</div>
+                                        @if (Model.RateableItemIds.Contains(m.Id))
+                                        {
+                                            <a asp-action="MealFeedback" asp-route-mealPlanItemId="@m.Id" class="small fw-semibold"><i class="bi bi-star-fill me-1" style="color:#f59e0b"></i>Rate this meal</a>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+    <p class="k-sub mt-3"><i class="bi bi-info-circle me-1"></i>Meals can be rated for 24 hours after they are served.</p>
+}

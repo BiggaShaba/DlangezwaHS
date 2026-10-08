@@ -1,0 +1,41 @@
+@model IList<Learner>
+@{ ViewData["Title"] = "Boarders"; }
+
+<div class="page-header">
+    <h2><i class="bi bi-people me-2"></i>Boarders</h2>
+    <p>View each boarder's QR badge for check-in/out scanning</p>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-people fs-1 d-block mb-3" style="color:#97C8E9;"></i>
+                <h5>No boarders allocated yet</h5>
+            </div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>#</th><th>Name</th><th>Learner ID</th><th></th></tr></thead>
+                <tbody>
+                @{ int i = 1; }
+                @foreach (var l in Model)
+                {
+                    <tr>
+                        <td class="text-muted small">@(i++)</td>
+                        <td><strong>@l.FullName</strong></td>
+                        <td><small>@l.LearnerIdNumber</small></td>
+                        <td>
+                            <a asp-action="LearnerQr" asp-route-learnerId="@l.Id" class="btn btn-sm btn-dhs-secondary">
+                                <i class="bi bi-qr-code me-1"></i>View QR Badge
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

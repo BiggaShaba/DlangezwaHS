@@ -1,0 +1,109 @@
+@model ParentAcademicViewModel
+@{
+    ViewData["Title"] = "Academic Report";
+    var subjects = Model.SubjectSummaries.ToList();
+    var overall = subjects.Any() ? subjects.Average(s => s.Average) : 0;
+    var passed = subjects.Count(s => s.IsPassed);
+    var best = subjects.OrderByDescending(s => s.Average).FirstOrDefault();
+    var chart = System.Text.Json.JsonSerializer.Serialize(new { labels = subjects.Select(s => s.SubjectName), values = subjects.Select(s => s.Average) });
+}
+
+<style>
+    .ar-terms { display: inline-flex; padding: 4px; border-radius: 14px; background: rgba(255,255,255,.14); gap: 4px; flex-wrap: wrap; }
+    .ar-terms a { padding: .42rem .95rem; border-radius: 10px; color: rgba(255,255,255,.85); font-weight: 600; text-decoration: none; font-size: .88rem; transition: background .2s, color .2s; }
+    .ar-terms a:hover { color: #fff; background: rgba(255,255,255,.12); }
+    .ar-terms a.active { background: #fff; color: var(--dhs-navy); }
+    .ar-grade { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; }
+    .ar-grade.pass { background: #dcfce7; color: #166534; } .ar-grade.fail { background: #fee2e2; color: #b91c1c; }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-file-earmark-bar-graph me-2"></i>Academic Report</h2>
+        <p>@Model.LearnerName · @Model.ClassName</p>
+    </div>
+    <nav class="ar-terms" aria-label="Term">
+        @foreach (var t in Model.AvailableTerms)
+        {
+            <a asp-action="AcademicReport" asp-route-learnerId="@Model.LearnerId" asp-route-term="@t" class="@(t == Model.Term ? "active" : "")" aria-current="@(t == Model.Term ? "page" : null)">@t</a>
+        }
+    </nav>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-graph-up"></i>Term average</div>
+        <div class="k-stat-value">@if (subjects.Any()) { <span data-count="@overall.ToString("0", System.Globalization.CultureInfo.InvariantCulture)">@overall.ToString("0")</span><span>%</span> } else { <span>—</span> }</div><div class="k-stat-note">@Model.Term</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Subjects passed</div><div class="k-stat-value">@passed<small class="k-sub"> / @subjects.Count</small></div><div class="k-stat-note">pass mark 40%</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-trophy"></i>Best subject</div><div class="k-stat-value" style="font-size:1.1rem">@(best?.SubjectName ?? "—")</div><div class="k-stat-note">@(best is null ? "" : $"{best.Average:0}% · grade {best.FinalGrade}")</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat @(Model.AttendancePct >= 80 || Model.TotalDays == 0 ? "lunch" : "danger")"><div class="k-stat-label"><i class="bi bi-calendar-check"></i>Attendance</div>
+        <div class="k-stat-value">@(Model.TotalDays > 0 ? $"{Model.AttendancePct:0}%" : "—")</div><div class="k-stat-note">@Model.PresentDays present · @Model.AbsentDays absent · @Model.LateDays late</div></div></div>
+</div>
+
+@if (Model.TotalDays > 0 && Model.AttendancePct < 80)
+{
+    <div class="alert alert-warning py-2 small" style="border-radius:14px"><i class="bi bi-exclamation-triangle me-1"></i>Attendance is below 80% this term. Regular attendance helps results.</div>
+}
+
+@if (!subjects.Any())
+{
+    <div class="k-empty k-rise" style="--i:4"><i class="bi bi-clipboard2"></i><strong>No results for @Model.Term yet</strong><p>Results appear once teachers submit marks for the term.</p></div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-7 k-rise" style="--i:4">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">Subject averages</h3><p class="k-sub">@Model.Term · the dashed line is the 40% pass mark</p></div></div>
+                <div style="position:relative;height:@(Math.Max(220, subjects.Count * 38 + 40))px"><canvas id="subjectChart" role="img" aria-label="Average per subject"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-5 k-rise" style="--i:5">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">Results</h3><p class="k-sub">Term averages only — individual marks stay with the school</p></div></div>
+                @foreach (var s in subjects.OrderByDescending(s => s.Average))
+                {
+                    <div class="d-flex align-items-center gap-3 py-2" style="border-bottom:1px solid #f1f5f9">
+                        <span class="ar-grade @(s.IsPassed ? "pass" : "fail")">@s.FinalGrade</span>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="fw-semibold text-truncate" style="color:var(--dhs-navy)">@s.SubjectName</div>
+                            <div class="k-meter mt-1"><span class="@(s.IsPassed ? "" : "danger")" data-pct="@s.Average.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"></span></div>
+                        </div>
+                        <div class="text-end"><div class="fw-bold" style="color:var(--dhs-navy)">@s.Average.ToString("0")%</div><span class="k-pill @(s.IsPassed ? "ok" : "danger")">@(s.IsPassed ? "Pass" : "Fail")</span></div>
+                    </div>
+                }
+                <div class="k-sub mt-3"><strong>Grade key:</strong> A 80–100 · B 70–79 · C 60–69 · D 50–59 · E 40–49 · F 30–39 · G 0–29</div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="mt-4">
+    <a asp-action="LearnerOverview" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-ghost"><i class="bi bi-arrow-left"></i>Back</a>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const el = document.getElementById('subjectChart');
+    if (!el || typeof Chart === 'undefined') return;
+    const d = @Html.Raw(chart);
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const passLine = { id: 'passLine', afterDatasetsDraw(c) {
+        const x = c.scales.x.getPixelForValue(40), { top, bottom } = c.chartArea, ctx = c.ctx;
+        ctx.save(); ctx.setLineDash([5, 5]); ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore(); } };
+    new Chart(el, {
+        type: 'bar',
+        data: { labels: d.labels, datasets: [{ data: d.values, borderRadius: 8, borderSkipped: false, maxBarThickness: 24,
+            backgroundColor: c => (d.values[c.dataIndex] ?? 0) < 40 ? '#f87171' : (d.values[c.dataIndex] >= 70 ? '#1a4a7a' : '#5ea8d3') }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            animation: { duration: reduce ? 0 : 1600, easing: 'easeOutQuart', delay: c => c.type === 'data' ? c.dataIndex * 90 : 0 },
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0B2A4A', padding: 12, cornerRadius: 12, callbacks: { label: c => ` ${c.parsed.x.toFixed(1)}%` } } },
+            scales: { x: { min: 0, max: 100, grid: { color: 'rgba(11,42,74,.07)' }, border: { display: false }, ticks: { color: '#6B7280', callback: v => v + '%' } },
+                      y: { grid: { display: false }, border: { display: false }, ticks: { color: '#0B2A4A', font: { weight: '600' } } } } },
+        plugins: [passLine]
+    });
+})();
+</script>
+}

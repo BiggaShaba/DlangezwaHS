@@ -1,0 +1,92 @@
+@model LearnerAssessmentsViewModel
+@{
+    ViewData["Title"] = "My Assessments";
+    var upcoming = Model.Assessments.Where(a => a.IsUpcoming).OrderBy(a => a.Date).ToList();
+    var done = Model.Assessments.Where(a => !a.IsUpcoming).OrderByDescending(a => a.Date).ToList();
+    var marked = done.Where(a => a.Percentage is not null).ToList();
+    var subjects = Model.Assessments.Select(a => a.Subject).Distinct().OrderBy(s => s).ToList();
+    string TypeIcon(string t) => t switch { "Exam" => "bi-file-earmark-text", "Assignment" => "bi-pencil-square", _ => "bi-clipboard-check" };
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-pencil-square me-2"></i>My Assessments</h2>
+        <p>@Model.ClassName · tests, assignments and exams in your subjects</p>
+    </div>
+    <a asp-action="Index" class="k-btn k-btn-light"><i class="bi bi-arrow-left"></i>Dashboard</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-hourglass-split"></i>Upcoming</div><div class="k-stat-value" data-count="@upcoming.Count">@upcoming.Count</div><div class="k-stat-note">@(upcoming.FirstOrDefault() is { } next ? $"next: {next.Date:ddd dd MMM}" : "none scheduled")</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Marked</div><div class="k-stat-value" data-count="@marked.Count">@marked.Count</div><div class="k-stat-note">of @done.Count written</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-bar-chart"></i>Average</div><div class="k-stat-value">@(marked.Any() ? $"{marked.Average(a => a.Percentage!.Value):0}%" : "—")</div><div class="k-stat-note">across marked work</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-trophy"></i>Passed</div><div class="k-stat-value" data-count="@marked.Count(a => a.IsPassed == true)">@marked.Count(a => a.IsPassed == true)</div><div class="k-stat-note">40% or more</div></div></div>
+</div>
+
+<div class="k-section k-rise mt-0" style="--i:4">Coming up</div>
+@if (!upcoming.Any()) { <div class="k-empty mb-3"><i class="bi bi-emoji-smile"></i><strong>Nothing scheduled</strong><p>Your teachers haven't set any upcoming assessments.</p></div> }
+<div class="row g-3">
+    @foreach (var (a, i) in upcoming.Select((a, i) => (a, i)))
+    {
+        var days = (a.Date.Date - DateTime.Today).Days;
+        <div class="col-md-6 col-xl-4 k-rise" style="--i:@(Math.Min(i + 5, 14))">
+            <div class="k-stat h-100" style="--k-accent:@(days <= 3 ? "#f59e0b" : "var(--dhs-blue-dark)")">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <span class="k-pill"><i class="bi @TypeIcon(a.Type)"></i>@a.Type</span>
+                    <span class="k-pill @(days <= 3 ? "warn" : "")">@(days == 0 ? "Today" : days == 1 ? "Tomorrow" : $"in {days} days")</span>
+                </div>
+                <div class="fw-bold mt-2" style="color:var(--dhs-navy);font-size:1.05rem">@a.Name</div>
+                <div class="k-sub">@a.Subject · @a.Date.ToString("dddd dd MMM") · @a.TotalMarks.ToString("0") marks · @a.Term</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="k-card mt-4 k-rise" style="--i:8">
+    <div class="k-card-head">
+        <div><h3 class="k-title">Written &amp; marked</h3><p class="k-sub">Newest first</p></div>
+        <select id="subjectFilter" class="form-select k-select" style="width:auto" aria-label="Filter by subject">
+            <option value="">All subjects</option>
+            @foreach (var s in subjects) { <option value="@s">@s</option> }
+        </select>
+    </div>
+    @if (!done.Any()) { <p class="k-sub mb-0">No assessments written yet.</p> }
+    else
+    {
+        <div class="k-table-wrap">
+            <table class="k-table">
+                <thead><tr><th>Date</th><th>Assessment</th><th>Subject</th><th>Term</th><th class="k-num">Mark</th><th class="k-num">%</th><th>Grade</th></tr></thead>
+                <tbody id="doneList" data-more-list data-more-initial="10" data-more-step="10">
+                @foreach (var a in done)
+                {
+                    <tr data-more-item data-subject="@a.Subject">
+                        <td class="text-nowrap">@a.Date.ToString("dd MMM yyyy")</td>
+                        <td class="fw-semibold"><i class="bi @TypeIcon(a.Type) me-1" style="color:var(--dhs-blue-dark)"></i>@a.Name</td>
+                        <td><span class="k-sub">@a.Subject</span></td>
+                        <td><span class="k-sub">@a.Term</span></td>
+                        <td class="k-num">@(a.MarksObtained is decimal m ? $"{m:0}/{a.TotalMarks:0}" : "—")</td>
+                        <td class="k-num fw-bold @(a.IsPassed == false ? "text-danger" : "")">@(a.Percentage is decimal p ? $"{p:0}%" : "—")</td>
+                        <td>@if (a.Grade is not null) { <span class="k-pill @(a.IsPassed == true ? "ok" : "danger")">@a.Grade</span> } else { <span class="k-sub">Not marked</span> }</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="doneList"><i class="bi bi-chevron-down"></i>See <span data-more-count>10</span> more</button></div>
+    }
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('subjectFilter')?.addEventListener('change', e => {
+        const s = e.target.value;
+        document.querySelectorAll('#doneList [data-more-item]').forEach(r => {
+            const match = !s || r.dataset.subject === s;
+            r.toggleAttribute('data-filtered-out', !match);
+            r.hidden = !match;
+            if (s && match) r.classList.remove('k-more-hidden');
+        });
+        if (!s) window.kInitMore(document); else document.querySelector('[data-more-btn="doneList"]').hidden = true;
+    });
+</script>
+}

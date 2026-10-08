@@ -1,0 +1,143 @@
+@model ParentDietaryProfileViewModel
+@{
+    ViewData["Title"] = "Dietary Profile";
+    var active = Model.ActiveProfile;
+    var allergies = active?.Items.Where(i => i.Category == "Allergy").ToList() ?? new();
+    var needs = active?.Items.Where(i => i.Category != "Allergy").ToList() ?? new();
+    string CategoryLabel(string c) => c switch { "DietaryRequirement" => "Dietary requirement", "MedicalRestriction" => "Medical", _ => c };
+    string CategoryIcon(string c) => c switch { "DietaryRequirement" => "bi-egg-fried", "MedicalRestriction" => "bi-heart-pulse", "Preference" => "bi-hand-thumbs-up", _ => "bi-shield-exclamation" };
+    string StatusLabel(string s) => s switch { "Superseded" => "Replaced", "PendingParent" or "Pending" => "Not used", _ => s };
+}
+
+<style>
+    .dp-need { display: flex; gap: .8rem; align-items: flex-start; padding: .8rem .9rem; border-radius: 16px; background: var(--dhs-light); margin-bottom: .55rem;
+        transition: transform .25s var(--ease-spring), box-shadow .25s; }
+    .dp-need:hover { transform: translateX(4px); box-shadow: var(--shadow-ambient); }
+    .dp-need .ico { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: #fff; color: var(--dhs-blue-dark); flex-shrink: 0; font-size: 1.1rem; }
+    .dp-need.severe { background: #fef2f2; }
+    .dp-need.severe .ico { color: #dc2626; }
+    .dp-need .name { font-weight: 700; color: var(--dhs-navy); font-size: 1rem; }
+    .dp-need .meta { font-size: .8rem; color: var(--dhs-grey); }
+</style>
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-clipboard2-pulse me-2"></i>Dietary Profile</h2>
+        <p>@Model.LearnerName · shared with the kitchen and housemaster as soon as it's saved</p>
+    </div>
+    <a asp-action="DietaryProfileCreate" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-accent"><i class="bi bi-pencil-square"></i>@(active is null ? "Add Profile" : "Update Profile")</a>
+</div>
+
+@if (active is null)
+{
+    <div class="k-empty k-rise">
+        <i class="bi bi-clipboard2-plus"></i>
+        <strong>No dietary profile on file</strong>
+        <p>Add allergies or dietary needs so the kitchen can keep @Model.LearnerName safe.</p>
+        <a asp-action="DietaryProfileCreate" asp-route-learnerId="@Model.LearnerId" class="k-btn k-btn-primary mt-3"><i class="bi bi-plus-lg"></i>Add Profile</a>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-6 k-rise" style="--i:0">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">Allergies</h3><p class="k-sub">Active since @active.SubmittedAt.AddHours(2).ToString("dd MMM yyyy")@(active.SubmittedByLearner ? " · added by the learner" : "")</p></div></div>
+                @if (!allergies.Any()) { <p class="k-sub mb-0">No allergies recorded.</p> }
+                @foreach (var i in allergies)
+                {
+                    var severe = i.Severity is "Severe" or "Anaphylactic";
+                    <div class="dp-need @(severe ? "severe" : "")">
+                        <span class="ico"><i class="bi @(severe ? "bi-exclamation-octagon-fill" : "bi-shield-exclamation")"></i></span>
+                        <div>
+                            <div class="name">@i.Name</div>
+                            <div class="meta">@(i.Severity ?? "Severity not given")@(severe ? " · meals containing this can't be pre-ordered" : "")</div>
+                            @if (!string.IsNullOrEmpty(i.Notes)) { <div class="meta">@i.Notes</div> }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-6 k-rise" style="--i:1">
+            <div class="k-card h-100">
+                <div class="k-card-head"><div><h3 class="k-title">Requirements &amp; preferences</h3><p class="k-sub">Dietary, medical and personal needs</p></div></div>
+                @if (!needs.Any()) { <p class="k-sub mb-0">None recorded.</p> }
+                @foreach (var i in needs)
+                {
+                    <div class="dp-need">
+                        <span class="ico"><i class="bi @CategoryIcon(i.Category)"></i></span>
+                        <div>
+                            <div class="name">@i.Name</div>
+                            <div class="meta">@CategoryLabel(i.Category)</div>
+                            @if (!string.IsNullOrEmpty(i.Notes)) { <div class="meta">@i.Notes</div> }
+                        </div>
+                    </div>
+                }
+                @if (active.Documents.Any())
+                {
+                    <div class="k-label mt-3">Supporting documents</div>
+                    <partial name="_DietaryDocuments" model="active.Documents" />
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.History.Any())
+{
+    <div class="k-card mt-4 k-rise" style="--i:2">
+        <div class="k-card-head">
+            <div><h3 class="k-title">Submission history</h3><p class="k-sub">@Model.History.Count submission(s) — pick one to see what it contained</p></div>
+            <select id="historySelect" class="form-select k-select" style="width:auto;min-width:260px" aria-label="Choose a submission">
+                @foreach (var p in Model.History)
+                {
+                    <option value="@p.Id">@p.SubmittedAt.AddHours(2).ToString("dd MMM yyyy HH:mm") — @StatusLabel(p.Status)@(p.SubmittedByLearner ? " (by learner)" : "")</option>
+                }
+            </select>
+        </div>
+        @foreach (var p in Model.History)
+        {
+            var pill = p.Status switch { "Active" => "ok", "Rejected" => "danger", _ => "" };
+            <div class="history-entry" data-history-id="@p.Id" hidden="@(p != Model.History.First())">
+                <div class="mb-2 d-flex flex-wrap gap-2 align-items-center">
+                    <span class="k-pill @pill">@StatusLabel(p.Status)</span>
+                    @if (p.SubmittedByLearner) { <span class="k-pill">by learner</span> }
+                    @if (p.Status == "Rejected" && !string.IsNullOrEmpty(p.RejectionReason)) { <span class="k-sub">@p.RejectionReason</span> }
+                </div>
+                <div class="k-table-wrap">
+                    <table class="k-table">
+                        <thead><tr><th>Type</th><th>Name</th><th>Severity</th><th>Notes</th></tr></thead>
+                        <tbody>
+                        @foreach (var i in p.Items)
+                        {
+                            <tr>
+                                <td><span class="k-pill"><i class="bi @CategoryIcon(i.Category)"></i>@CategoryLabel(i.Category)</span></td>
+                                <td class="fw-semibold">@i.Name</td>
+                                <td>@if (i.Severity is "Severe" or "Anaphylactic") { <span class="k-pill danger">@i.Severity</span> } else { <span class="k-sub">@(i.Severity ?? "—")</span> }</td>
+                                <td><span class="k-sub">@i.Notes</span></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                @if (p.Documents.Any())
+                {
+                    <div class="k-label mt-3">Documents</div>
+                    <partial name="_DietaryDocuments" model="p.Documents" />
+                }
+            </div>
+        }
+    </div>
+}
+
+@section Scripts {
+<script>
+    document.getElementById('historySelect')?.addEventListener('change', e => {
+        document.querySelectorAll('.history-entry').forEach(el => {
+            const show = el.dataset.historyId === e.target.value;
+            el.hidden = !show;
+            if (show) { el.classList.remove('k-more-in'); void el.offsetWidth; el.classList.add('k-more-in'); }
+        });
+    });
+</script>
+}

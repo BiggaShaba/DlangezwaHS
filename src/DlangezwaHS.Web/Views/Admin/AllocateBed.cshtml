@@ -1,0 +1,39 @@
+@model AllocateBedViewModel
+@{ ViewData["Title"] = "Allocate Bed"; }
+<div class="row justify-content-center">
+<div class="col-md-6">
+<div class="page-header">
+    <h2><i class="bi bi-door-open me-2"></i>Allocate Bed</h2>
+    <p>Learner: <strong>@Model.LearnerName</strong></p>
+</div>
+<div class="card">
+    <div class="card-body p-4">
+        <form asp-action="AllocateBed" method="post">
+            @Html.AntiForgeryToken()
+            <input asp-for="LearnerId" type="hidden" />
+            <div class="mb-3">
+                <label asp-for="RoomId" class="form-label">Room <span class="text-danger">*</span></label>
+                <select asp-for="RoomId" id="RoomId" class="form-select" required>
+                    <option value="">— Select Room —</option>
+                    @foreach (var r in Model.AvailableRooms)
+                    {
+                        var avail = r.Beds.Count(b => b.Status == BedStatus.Available);
+                        <option value="@r.Id">@r.Name (@avail beds available)</option>
+                    }
+                </select>
+            </div>
+            <div class="mb-4">
+                <label asp-for="BedId" class="form-label">Bed <span class="text-danger">*</span></label>
+                <select asp-for="BedId" id="BedId" class="form-select" required>
+                    <option value="">— Select Room first —</option>
+                </select>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-dhs-primary"><i class="bi bi-check me-1"></i> Allocate</button>
+                <a asp-action="Enrollments" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>

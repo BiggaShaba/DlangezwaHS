@@ -1,0 +1,266 @@
+@model InventoryViewModel
+@{
+    ViewData["Title"] = "Inventory";
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var low = Model.Ingredients.Where(i => i.IsLowStock).ToList();
+    var stockValue = Model.Ingredients.Sum(i => i.CurrentStock * i.UnitCost);
+    var monthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    var monthSpend = Model.Receipts.Where(r => r.ReceiptDate >= monthStart).Sum(r => r.TotalAmount);
+    var ingredients = Model.Ingredients.OrderByDescending(i => i.IsLowStock).ThenBy(i => i.Name).ToList();
+    var receiptDays = Model.Receipts.GroupBy(r => r.ReceiptDate.Date).OrderByDescending(g => g.Key).ToList();
+    var usageMeals = Model.RecentUsage.GroupBy(u => u.MealPlanItemId?.ToString() ?? u.MealDescription)
+        .Select(g => new { Rows = g.ToList(), First = g.First(), When = g.Max(u => u.RecordedAt) })
+        .OrderByDescending(g => g.When).ToList();
+    string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", "Dinner" => "bi-moon-stars", _ => "bi-egg-fried" };
+}
+
+<div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2><i class="bi bi-box-seam me-2"></i>Inventory</h2>
+        <p>Stock goes up when a supplier receipt is captured and down automatically when a meal's collection closes</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="k-btn k-btn-light" data-bs-toggle="modal" data-bs-target="#ingredientModal" data-new-ingredient><i class="bi bi-plus-lg"></i>Add Ingredient</button>
+        <a asp-action="RecordUsage" class="k-btn k-btn-light"><i class="bi bi-fire"></i>Usage &amp; Leftovers</a>
+        <a asp-action="ReceiveStock" class="k-btn k-btn-accent"><i class="bi bi-receipt"></i>Receive Stock</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-basket"></i>Ingredients</div><div class="k-stat-value" data-count="@Model.Ingredients.Count">@Model.Ingredients.Count</div><div class="k-stat-note">tracked in stock</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-exclamation-triangle"></i>Low on stock</div><div class="k-stat-value" data-count="@low.Count">@low.Count</div><div class="k-stat-note">@(low.Any() ? string.Join(", ", low.Take(3).Select(l => l.Name)) + (low.Count > 3 ? "…" : "") : "everything above minimum")</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-cash-stack"></i>Stock value</div><div class="k-stat-value" data-count="@stockValue.ToString("0", inv)" data-prefix="R">R@(stockValue.ToString("N0"))</div><div class="k-stat-note">at the latest prices</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-receipt"></i>Received this month</div><div class="k-stat-value" data-count="@monthSpend.ToString("0", inv)" data-prefix="R">R@(monthSpend.ToString("N0"))</div><div class="k-stat-note">@Model.Receipts.Count(r => r.ReceiptDate >= monthStart) receipt(s)</div></div></div>
+</div>
+
+<div class="k-card k-rise" style="--i:4">
+    <div class="k-card-head">
+        <div><h3 class="k-title">Stock levels</h3><p class="k-sub">Low stock first · the bar compares stock with three times the minimum</p></div>
+        <input type="search" id="stockSearch" class="form-control k-input" style="max-width:240px" placeholder="Search ingredients…" aria-label="Search ingredients" />
+    </div>
+    @if (!ingredients.Any())
+    {
+        <div class="k-empty"><i class="bi bi-basket"></i><strong>No ingredients yet</strong><p>Use <strong>Add Ingredient</strong>, then capture a receipt to add stock.</p></div>
+    }
+    else
+    {
+        <div class="k-table-wrap">
+            <table class="k-table">
+                <thead><tr><th>Ingredient</th><th style="min-width:180px">In stock</th><th class="k-num">Minimum</th><th class="k-num">Price</th><th></th></tr></thead>
+                <tbody id="stockList" data-more-list data-more-initial="5" data-more-step="5">
+                @foreach (var i in ingredients)
+                {
+                    var pct = i.MinimumStock > 0 ? (double)(i.CurrentStock / (i.MinimumStock * 3) * 100) : 100;
+                    <tr data-more-item data-search="@i.Name.ToLowerInvariant()">
+                        <td><span class="fw-bold" style="color:var(--dhs-navy)">@i.Name</span> @if (i.IsLowStock) { <span class="k-pill danger ms-1">Low</span> }</td>
+                        <td>
+                            <div class="d-flex justify-content-between k-sub mb-1"><span class="fw-semibold" style="color:var(--dhs-navy)">@i.CurrentStock.ToString("0.##") @i.Unit</span></div>
+                            <div class="k-meter"><span class="@(i.IsLowStock ? "danger" : "")" data-pct="@pct.ToString("0", inv)"></span></div>
+                        </td>
+                        <td class="k-num">@i.MinimumStock.ToString("0.##") @i.Unit</td>
+                        <td class="k-num">@(i.UnitCost > 0 ? $"R{i.UnitCost:N2}" : "—")<div class="k-sub">per @i.Unit</div></td>
+                        <td class="text-end text-nowrap">
+                            <a asp-action="ReceiveStock" asp-route-ingredientId="@i.Id" class="k-btn k-btn-ghost k-btn-sm" title="Receive stock for @i.Name"><i class="bi bi-plus-lg"></i>Stock</a>
+                            <button type="button" class="k-btn k-btn-ghost k-btn-sm" data-edit-ingredient data-id="@i.Id" data-name="@i.Name" data-unit="@i.Unit"
+                                    data-min="@i.MinimumStock.ToString("0.##", inv)" aria-label="Edit @i.Name"><i class="bi bi-pencil"></i></button>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div class="k-sub text-center mt-2" id="noStockMatch" hidden>No ingredients match.</div>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="stockList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+    }
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-xl-6">
+        <div class="k-section k-rise" style="--i:5">Receipts &amp; invoices · by date</div>
+        @if (!receiptDays.Any())
+        {
+            <div class="k-empty"><i class="bi bi-receipt"></i><strong>No receipts yet</strong><p>Captured supplier receipts appear here.</p></div>
+        }
+        <div id="receiptList" data-more-list data-more-initial="5" data-more-step="5">
+            @foreach (var (day, idx) in receiptDays.Select((d, i) => (d, i)))
+            {
+                var id = $"rc-{day.Key:yyyyMMdd}";
+                <div class="k-acc @(day.Key < DateTime.Today ? "is-past" : "")" data-more-item>
+                    <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="@(idx == 0 ? "true" : "false")" aria-controls="@id">
+                        <span class="k-date" aria-hidden="true"><span><b>@day.Key.Day</b>@day.Key.ToString("MMM")</span></span>
+                        <span class="flex-grow-1">
+                            <span class="k-acc-title d-block">@string.Join(", ", day.Select(r => r.SupplierName).Distinct())</span>
+                            <span class="k-acc-meta">@day.Count() receipt(s) · @day.Sum(r => r.LineCount) item(s)</span>
+                        </span>
+                        <span class="fw-bold me-1" style="color:var(--dhs-navy)">R@(day.Sum(r => r.TotalAmount).ToString("N2"))</span>
+                        <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+                    </button>
+                    <div class="collapse @(idx == 0 ? "show" : "")" id="@id">
+                        <div class="k-acc-body">
+                            <table class="k-table">
+                                <tbody>
+                                @foreach (var r in day)
+                                {
+                                    <tr>
+                                        <td><div class="fw-semibold">@r.SupplierName</div><div class="k-sub">@(r.InvoiceNumber ?? "No invoice number") · @r.LineCount item(s)</div></td>
+                                        <td class="k-num fw-bold">R@(r.TotalAmount.ToString("N2"))</td>
+                                        <td class="text-end"><a asp-action="Receipt" asp-route-id="@r.Id" class="k-btn k-btn-ghost k-btn-sm">View</a></td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="receiptList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+    </div>
+
+    <div class="col-xl-6">
+        <div class="k-section k-rise" style="--i:6">Ingredients used · by meal</div>
+        @if (!usageMeals.Any())
+        {
+            <div class="k-empty"><i class="bi bi-fire"></i><strong>No usage yet</strong><p>Ingredients are deducted when a meal's collection is closed at the scanner.</p></div>
+        }
+        <div id="usageList" data-more-list data-more-initial="5" data-more-step="5">
+            @foreach (var (g, idx) in usageMeals.Select((g, i) => (g, i)))
+            {
+                var id = $"us-{idx}";
+                var type = g.First.MealType;
+                <div class="k-acc" data-more-item>
+                    <button class="k-acc-head" type="button" data-bs-toggle="collapse" data-bs-target="#@id" aria-expanded="false" aria-controls="@id">
+                        <span class="k-date" aria-hidden="true"><span><b>@g.When.AddHours(2).Day</b>@g.When.AddHours(2).ToString("MMM")</span></span>
+                        <span class="flex-grow-1 min-w-0">
+                            <span class="k-acc-title d-block text-truncate">@g.First.MealDescription</span>
+                            <span class="k-acc-meta">
+                                @if (!string.IsNullOrEmpty(type)) { <span class="k-meal @type.ToLowerInvariant()"><i class="bi @TypeIcon(type)"></i>@type</span> }
+                                @g.Rows.Count ingredient(s)
+                            </span>
+                        </span>
+                        <i class="bi bi-chevron-down k-chevron" aria-hidden="true"></i>
+                    </button>
+                    <div class="collapse" id="@id">
+                        <div class="k-acc-body">
+                            <table class="k-table">
+                                <tbody>
+                                @foreach (var u in g.Rows.OrderBy(u => u.IngredientName))
+                                {
+                                    <tr><td>@u.IngredientName</td><td class="k-num fw-semibold" style="color:#b91c1c">−@u.QuantityUsed.ToString("0.##") @u.Unit</td></tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="usageList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+    </div>
+</div>
+
+<div class="k-card mt-4 k-rise" style="--i:7">
+    <div class="k-card-head"><div><h3 class="k-title">Purchase requisitions</h3><p class="k-sub">Generated when a week's pre-orders are finalised — only the shortfall is ordered</p></div></div>
+    @if (!Model.Requisitions.Any())
+    {
+        <p class="k-sub mb-0">No requisitions yet. Finalise a week on the Pre-Orders page to generate one.</p>
+    }
+    else
+    {
+        <table class="k-table">
+            <thead><tr><th>Generated</th><th>Status</th><th class="k-num">Items</th><th></th></tr></thead>
+            <tbody id="reqList" data-more-list data-more-initial="5" data-more-step="5">
+            @foreach (var r in Model.Requisitions)
+            {
+                <tr data-more-item>
+                    <td>@r.GeneratedAt.AddHours(2).ToString("dd MMM yyyy HH:mm")</td>
+                    <td><span class="k-pill @(r.Status == "Draft" ? "warn" : "ok")">@r.Status</span></td>
+                    <td class="k-num">@r.ItemCount</td>
+                    <td class="text-end"><a asp-action="InventoryRequisition" asp-route-id="@r.Id" class="k-btn k-btn-ghost k-btn-sm">View</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <div class="k-more-bar"><button type="button" class="k-btn k-btn-ghost" data-more-btn="reqList"><i class="bi bi-chevron-down"></i>See <span data-more-count>5</span> more</button></div>
+    }
+</div>
+
+<!-- Add / edit ingredient -->
+<div class="modal fade k-modal" id="ingredientModal" tabindex="-1" aria-labelledby="ingredientTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form asp-action="SaveIngredient" method="post" id="ingredientForm" data-busy>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="Id" id="ingId" />
+                <div class="k-modal-head">
+                    <span class="k-bubble b1"></span><span class="k-bubble b2"></span><span class="k-bubble b3"></span>
+                    <h5 id="ingredientTitle">Add Ingredient</h5>
+                    <p id="ingredientNote">New ingredients start at 0 — capture a supplier receipt to add stock.</p>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="k-label" for="ingName">Name</label>
+                        <input name="Name" id="ingName" class="form-control k-input" required maxlength="100" />
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="k-label" for="ingUnit">Unit</label>
+                            <select name="Unit" id="ingUnit" class="form-select k-select">
+                                @foreach (var u in Enum.GetValues<StockUnit>()) { <option value="@u">@u</option> }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="k-label" for="ingMin">Minimum stock</label>
+                            <input name="MinimumStock" id="ingMin" type="number" step="0.01" min="0" class="form-control k-input" required />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="k-btn k-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="k-btn k-btn-primary" data-busy-text="Saving…"><i class="bi bi-check2-circle"></i>Save Ingredient</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const modal = document.getElementById('ingredientModal');
+    const setForm = (d) => {
+        document.getElementById('ingId').value = d ? d.id : '';
+        document.getElementById('ingName').value = d ? d.name : '';
+        document.getElementById('ingUnit').value = d ? d.unit : 'Kg';
+        document.getElementById('ingMin').value = d ? d.min : '';
+        document.getElementById('ingredientTitle').textContent = d ? 'Edit ' + d.name : 'Add Ingredient';
+        document.getElementById('ingredientNote').textContent = d ? 'Stock levels change through receipts and meal collections, not here.' : 'New ingredients start at 0 — capture a supplier receipt to add stock.';
+    };
+    document.querySelector('[data-new-ingredient]').addEventListener('click', () => setForm(null));
+    document.querySelectorAll('[data-edit-ingredient]').forEach(b => b.addEventListener('click', () => {
+        setForm(b.dataset);
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }));
+    modal.addEventListener('shown.bs.modal', () => document.getElementById('ingName').focus());
+
+    const search = document.getElementById('stockSearch');
+    search?.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#stockList [data-more-item]').forEach(row => {
+            const match = !q || row.dataset.search.includes(q);
+            row.toggleAttribute('data-filtered-out', !match);
+            row.hidden = !match;
+            if (q && match) { row.classList.remove('k-more-hidden'); shown++; }
+        });
+        document.getElementById('noStockMatch').hidden = !q || shown > 0;
+        if (!q) window.kInitMore(document);
+        else document.querySelector('[data-more-btn="stockList"]').hidden = true;
+        window.kAnimateMeters();
+    });
+    // Meters inside newly revealed rows
+    document.querySelector('[data-more-btn="stockList"]')?.addEventListener('click', () => window.kAnimateMeters());
+})();
+</script>
+}

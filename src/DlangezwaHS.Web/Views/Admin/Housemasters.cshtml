@@ -1,0 +1,47 @@
+@model IList<HousemasterSummaryRow>
+@{ ViewData["Title"] = "Housemasters"; }
+
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><h2><i class="bi bi-shield-lock me-2"></i>Housemasters</h2><p>Manage housemaster accounts for boarding check-in/out and leave approvals</p></div>
+    <a asp-action="Settings" asp-fragment="tab-employ" class="btn btn-dhs-secondary">
+        <i class="bi bi-person-plus me-1"></i>Employ Housemaster
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-shield-lock fs-1 d-block mb-3" style="color:#97C8E9;"></i>
+                <h5>No housemasters registered yet</h5>
+                <a asp-action="Settings" asp-fragment="tab-employ" class="btn btn-dhs-primary mt-2">Employ First Housemaster</a>
+            </div>
+        }
+        else
+        {
+            <table class="table table-dhs mb-0">
+                <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Login</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                @{ int i = 1; }
+                @foreach (var h in Model)
+                {
+                    <tr>
+                        <td class="text-muted small">@(i++)</td>
+                        <td><strong>@h.FullName</strong><br/><small class="text-muted">@h.Phone</small></td>
+                        <td><small>@h.Email</small></td>
+                        <td>@(h.HasLogin ? "<span class='badge badge-approved rounded-pill'>Active</span>" : "<span class='badge badge-pending rounded-pill'>No Login</span>")</td>
+                        <td>@(h.IsActive ? "<span class='badge badge-approved rounded-pill'>Active</span>" : "<span class='badge badge-rejected rounded-pill'>Inactive</span>")</td>
+                        <td>
+                            <a asp-action="RegisterHousemaster" asp-route-id="@h.Id"
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
