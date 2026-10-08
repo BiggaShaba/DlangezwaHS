@@ -36,6 +36,10 @@
 
     <!-- PDF Generation -->
     <PackageReference Include="QuestPDF" Version="2023.12.6" />
+    <!-- QuestPDF draws with SkiaSharp, which only ships Windows/macOS native libraries;
+         these provide the Linux ones needed in the Docker container (Render) -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.7" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="7.3.0.1" />
 
     <!-- Email -->
     <PackageReference Include="MailKit" Version="4.3.0" />

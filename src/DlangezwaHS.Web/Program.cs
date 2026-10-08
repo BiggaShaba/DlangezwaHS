@@ -171,6 +171,18 @@ try
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         db.Database.Migrate();
     }
+
+    // ─── QuestPDF ─────────────────────────────────────────────────────────────
+    // Setting the licence loads QuestPDF's native (SkiaSharp) libraries. If they are
+    // missing on this platform, log it and carry on: only PDF downloads fail, not pages.
+    try
+    {
+        QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "QuestPDF could not be initialised — PDF generation will be unavailable");
+    }
     // Azure App Service (and most reverse proxies) terminate TLS at the edge and
     // forward requests as plain HTTP with X-Forwarded-* headers. Without this,
     // HttpContext.Request.IsHttps is false behind the proxy, which breaks anything

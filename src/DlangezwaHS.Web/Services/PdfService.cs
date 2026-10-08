@@ -28,8 +28,10 @@ public class PdfService : IPdfService
 
     public PdfService(ILogger<PdfService> logger)
     {
+        // QuestPDF's licence is set once at startup (Program.cs). Touching QuestPDF here
+        // would load its native libraries whenever a controller that merely injects this
+        // service is created — so a PDF problem would break pages that never make a PDF.
         _logger = logger;
-        QuestPDF.Settings.License = LicenseType.Community;
     }
 
     public byte[] GenerateRegistrationProof(Enrollment enrollment, Payment? registrationPayment,

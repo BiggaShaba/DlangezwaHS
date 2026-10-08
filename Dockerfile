@@ -7,8 +7,9 @@ COPY src/ src/
 RUN dotnet publish src/DlangezwaHS.Web/DlangezwaHS.Web.csproj -c Release -o /app --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
-# fontconfig is needed by QuestPDF to render PDFs on Linux
-RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 && rm -rf /var/lib/apt/lists/*
+# fontconfig is needed by QuestPDF to render PDFs on Linux; the image ships no fonts, so add
+# Liberation (metric-compatible with the "Arial" the PDFs ask for — fontconfig maps it)
+RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 fonts-liberation && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app .
 # Render routes traffic to $PORT (10000 by default); TLS is terminated by Render's proxy
