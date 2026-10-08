@@ -570,11 +570,22 @@ public class MealAttendanceService : IMealAttendanceService
         var item = await _db.MealPlanItems.FirstOrDefaultAsync(i => i.Id == mealPlanItemId)
             ?? throw new InvalidOperationException("Meal not found.");
         return await _db.MealPlanItems
-            .Include(i => i.Meal)
+            .Include(i => i.Meal).Include(i => i.MealPlan)
             .Where(i => i.MealPlanId == item.MealPlanId && i.DayOfWeek == item.DayOfWeek && i.MealType == item.MealType)
             .OrderBy(i => i.Id)
             .ToListAsync();
     }
+
+    private async Task<TimeSpan> ServingDurationAsync()
+        => ((await _db.BoardingSettings.FirstOrDefaultAsync()) ?? new BoardingSettings()).ServingDuration;
+
+    // Learner id → active allergies, for the learners given
+    private async Task<Dictionary<int, List<string>>> AllergiesForAsync(IList<int> learnerIds)
+        => (await _db.DietaryItems
+                .Where(d => learnerIds.Contains(d.DietaryProfile.LearnerId) && d.DietaryProfile.Status == DietaryProfileStatus.Active)
+                .Select(d => new { d.DietaryProfile.LearnerId, Text = d.Name + (d.Severity != null ? " (" + d.Severity.ToString() + ")" : "") })
+                .ToListAsync())
+            .GroupBy(x => x.LearnerId).ToDictionary(g => g.Key, g => g.Select(x => x.Text).Distinct().ToList());
 
     // Published meals placed on their actual calendar date (plan start + day offset)
     private async Task<List<(DateTime Date, MealPlanItem Item)>> PublishedMealsBetweenAsync(DateTime from, DateTime to)
@@ -596,6 +607,7 @@ public class MealAttendanceService : IMealAttendanceService
             .Where(o => ids.Contains(o.MealPlanItemId) && o.Status == PreOrderStatus.Confirmed)
             .GroupBy(o => o.MealPlanItemId).Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count);
+        var duration = await ServingDurationAsync();
 
         return meals.Select(m => m.Item)
             .GroupBy(i => (i.MealPlanId, i.MealType))
@@ -603,6 +615,7 @@ public class MealAttendanceService : IMealAttendanceService
             .Select(g =>
             {
                 var options = g.OrderBy(i => i.Id).ToList();
+                var start = TimeSpan.TryParse(options[0].ServingTime, out var t) ? today.Add(t) : today;
                 return new TodayMealOption
                 {
                     MealPlanItemId = options[0].Id,
@@ -610,7 +623,10 @@ public class MealAttendanceService : IMealAttendanceService
                     MenuDescription = string.Join(" / ", options.Select(i => i.MenuDescription)),
                     ServingTime = options[0].ServingTime,
                     OptionCount = options.Count,
-                    PreOrderCount = options.Sum(i => orderCounts.GetValueOrDefault(i.Id))
+                    PreOrderCount = options.Sum(i => orderCounts.GetValueOrDefault(i.Id)),
+                    ServingStart = start,
+                    ServingEnd = start + duration,
+                    IsFinished = options.Any(i => i.ScanningFinishedAt != null)
                 };
             })
             .ToList();
@@ -638,11 +654,12 @@ public class MealAttendanceService : IMealAttendanceService
 
         var serviceItems = await GetServiceItemsAsync(mealPlanItemId);
         var serviceIds = serviceItems.Select(i => i.Id).ToList();
+        if (serviceItems.Any(i => i.ScanningFinishedAt != null))
+            return new MealScanResult { Success = false, LearnerName = learner.FullName, Message = "Scanning for this meal has finished." };
 
-        var allergies = await _db.DietaryItems
-            .Where(d => d.DietaryProfile.LearnerId == learner.Id && d.DietaryProfile.Status == DietaryProfileStatus.Active)
-            .Select(d => d.Name + (d.Severity != null ? " (" + d.Severity.ToString() + ")" : ""))
-            .ToListAsync();
+        var allergies = (await AllergiesForAsync(new[] { learner.Id })).GetValueOrDefault(learner.Id) ?? new List<string>();
+        var room = await _db.RoomAllocations.Where(r => r.LearnerId == learner.Id && r.IsActive)
+            .Select(r => r.Room.Name).FirstOrDefaultAsync();
 
         var order = await _db.MealPreOrders
             .Where(o => serviceIds.Contains(o.MealPlanItemId) && o.LearnerId == learner.Id && o.Status == PreOrderStatus.Confirmed)
@@ -657,27 +674,31 @@ public class MealAttendanceService : IMealAttendanceService
             OrderedMeal = orderedItem?.MenuDescription,
             PortionSize = order?.PortionSize.ToString(),
             ImageUrl = orderedItem?.Meal?.ImagePath,
-            Allergies = allergies
+            Allergies = allergies,
+            Room = room
         };
 
         var existing = await _db.MealAttendances.FirstOrDefaultAsync(a => serviceIds.Contains(a.MealPlanItemId) && a.LearnerId == learner.Id);
         if (existing is not null)
         {
             result.Success = false;
-            result.Message = "Already served for this meal.";
+            result.CollectedAt = existing.ScannedAt is { } at ? SchoolClock.FromUtc(at).ToString("HH:mm") : null;
+            result.Message = result.CollectedAt is null ? "Already served for this meal." : $"Already served at {result.CollectedAt}.";
             return result;
         }
 
+        var scannedAt = DateTime.UtcNow;
         _db.MealAttendances.Add(new MealAttendance
         {
             // Record against the option they ordered, otherwise the service's main item
             MealPlanItemId = orderedItem?.Id ?? mealPlanItemId,
             LearnerId = learner.Id,
             Status = order is not null ? MealAttendanceStatus.Present : MealAttendanceStatus.Unauthorised,
-            ScannedAt = DateTime.UtcNow,
+            ScannedAt = scannedAt,
             ScannedByUserId = scannedByUserId
         });
         await _db.SaveChangesAsync();
+        result.CollectedAt = SchoolClock.FromUtc(scannedAt).ToString("HH:mm");
 
         result.Success = true;
         result.Message = order is not null
@@ -697,12 +718,28 @@ public class MealAttendanceService : IMealAttendanceService
             .Select(o => new { o.LearnerId, o.MealPlanItemId })
             .ToListAsync();
 
-        var attendances = await _db.MealAttendances.Where(a => serviceIds.Contains(a.MealPlanItemId)).ToListAsync();
-        var arrivedIds = attendances.Select(a => a.LearnerId).ToHashSet();
+        var attendances = await _db.MealAttendances.Include(a => a.Learner)
+            .Where(a => serviceIds.Contains(a.MealPlanItemId)).ToListAsync();
+        // Learners marked absent when scanning finished still count as "didn't collect"
+        var arrivedIds = attendances.Where(a => a.Status != MealAttendanceStatus.Absent).Select(a => a.LearnerId).ToHashSet();
 
         var notYetArrivedIds = orders.Select(o => o.LearnerId).Where(id => !arrivedIds.Contains(id)).Distinct().ToList();
         var notYetArrivedNames = await _db.Learners.Where(l => notYetArrivedIds.Contains(l.Id))
             .OrderBy(l => l.FirstName).Select(l => l.FirstName + " " + l.LastName).ToListAsync();
+
+        // Everyone scanned so far (absences recorded at finish have no scan time)
+        var scanned = attendances.Where(a => a.ScannedAt != null).OrderByDescending(a => a.ScannedAt).ToList();
+        var scannedIds = scanned.Select(a => a.LearnerId).Distinct().ToList();
+        var allergies = await AllergiesForAsync(scannedIds);
+        var portions = await _db.MealPreOrders
+            .Where(o => serviceIds.Contains(o.MealPlanItemId) && scannedIds.Contains(o.LearnerId) && o.Status == PreOrderStatus.Confirmed)
+            .Select(o => new { o.LearnerId, o.PortionSize }).ToListAsync();
+
+        var servingStart = MealOrderService.ComputeServingDateTime(first.MealPlan, first);
+        var servingEnd = servingStart + await ServingDurationAsync();
+        var finishedAt = serviceItems.Select(i => i.ScanningFinishedAt).FirstOrDefault(f => f != null);
+        var leftovers = finishedAt is null ? 0 : await _db.IngredientUsageRecords
+            .Where(r => serviceIds.Contains(r.MealPlanItemId)).SumAsync(r => r.LeftoverServings ?? 0);
 
         return new MealAttendanceLiveViewModel
         {
@@ -714,8 +751,23 @@ public class MealAttendanceService : IMealAttendanceService
             ScannedCount = attendances.Count(a => a.Status is MealAttendanceStatus.Present or MealAttendanceStatus.Late),
             NotYetArrived = notYetArrivedNames,
             FlaggedCount = attendances.Count(a => a.Status == MealAttendanceStatus.Unauthorised),
-            // Finalised once every learner who ordered has an outcome (collected or marked absent)
-            IsFinalised = orders.Count > 0 && notYetArrivedIds.Count == 0,
+            IsFinalised = finishedAt is not null,
+            FinishedAt = finishedAt is { } f ? SchoolClock.FromUtc(f) : null,
+            Leftovers = leftovers,
+            ServingStart = servingStart,
+            ServingEnd = servingEnd,
+            IsServingOver = SchoolClock.Now >= servingEnd,
+            Collected = scanned.Select(a => new MealCollectedRow
+            {
+                LearnerName = a.Learner.FullName,
+                Meal = a.Status == MealAttendanceStatus.Unauthorised
+                    ? "No pre-order"
+                    : serviceItems.First(i => i.Id == a.MealPlanItemId).MenuDescription,
+                PortionSize = portions.FirstOrDefault(o => o.LearnerId == a.LearnerId)?.PortionSize.ToString(),
+                CollectedAt = SchoolClock.FromUtc(a.ScannedAt!.Value).ToString("HH:mm"),
+                HasOrder = a.Status != MealAttendanceStatus.Unauthorised,
+                Allergies = allergies.GetValueOrDefault(a.LearnerId) ?? new List<string>()
+            }).ToList(),
             Options = serviceItems.Select(i => new MealServiceOptionRow
             {
                 MealPlanItemId = i.Id,
@@ -809,6 +861,10 @@ public class MealAttendanceService : IMealAttendanceService
 
         // Servings prepared, leftovers and the stock deduction are recorded automatically
         var usage = await _inventorySvc.RecordServiceUsageAsync(serviceIds, userId);
+
+        var finishedAt = DateTime.UtcNow;
+        foreach (var item in serviceItems.Where(i => i.ScanningFinishedAt == null)) item.ScanningFinishedAt = finishedAt;
+        await _db.SaveChangesAsync();
         return (missing.Count, usage);
     }
 

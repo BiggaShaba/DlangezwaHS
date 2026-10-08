@@ -96,7 +96,7 @@ public class LearnerController : Controller
             AttendancePct  = att.Any()
                 ? Math.Round((decimal)att.Count(a => a.Status == AttendanceStatus.Present) / att.Count * 100, 1)
                 : 0,
-            UpcomingMealOrders      = preOrders?.Meals.Count(m => m.CurrentOrderStatus is not null) ?? 0,
+            UpcomingMealOrders      = preOrders?.Meals.Count(m => m.CurrentOrderStatus is not null && !m.IsServingOver) ?? 0,
             HasActiveDietaryProfile = dietary.ActiveProfile is not null,
             IsBoarder               = await _db.RoomAllocations.AnyAsync(r => r.LearnerId == Me.Id && r.IsActive),
             UpcomingAssessments     = (await MyAssessmentsAsync(enrollment)).Where(a => a.IsUpcoming).OrderBy(a => a.Date).Take(6).ToList(),
@@ -255,8 +255,8 @@ public class LearnerController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> CancelMealOrder(int mealPlanItemId)
     {
-        await _mealOrderSvc.CancelOrderAsync(mealPlanItemId, Me.Id);
-        TempData["Success"] = "Pre-order cancelled.";
+        var (success, message) = await _mealOrderSvc.CancelOrderAsync(mealPlanItemId, Me.Id);
+        TempData[success ? "Success" : "Error"] = message;
         return RedirectToAction(nameof(PreOrder));
     }
 

@@ -10,6 +10,9 @@ public static class SchoolClock
     public static DateTime Now => DateTime.UtcNow.AddHours(2);
     public static DateTime Today => Now.Date;
 
+    /// <summary>Converts a stored UTC timestamp to school time.</summary>
+    public static DateTime FromUtc(DateTime utc) => utc.AddHours(2);
+
     /// <summary>The Monday of the week containing the given date.</summary>
     public static DateTime WeekStart(DateTime date) => date.Date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
 }

@@ -14,7 +14,7 @@ public interface IMealOrderService
 {
     Task<PreOrderWeekViewModel?> GetPreOrderScreenAsync(int learnerId);
     Task<(bool success, string message)> PlaceOrderAsync(int mealPlanItemId, int learnerId, string parentUserId, PortionSize portionSize);
-    Task CancelOrderAsync(int mealPlanItemId, int learnerId);
+    Task<(bool success, string message)> CancelOrderAsync(int mealPlanItemId, int learnerId);
     Task<IList<PreOrderSummaryRow>> GetKitchenPreOrderSummaryAsync(int mealPlanId);
     Task FinalizePreOrdersAsync(int mealPlanId, string kitchenStaffUserId);
 }
@@ -67,14 +67,15 @@ public class MealOrderService : IMealOrderService
                 .Where(c => c.SevereLearners.Contains(learner.FullName)));
 
         var now = SchoolClock.Now;
+        var servingDuration = ((await _db.BoardingSettings.FirstOrDefaultAsync()) ?? new BoardingSettings()).ServingDuration;
         foreach (var (plan, item) in plans.SelectMany(p => p.Items.Select(i => (p, i)))
                      .OrderBy(x => ComputeServingDateTime(x.p, x.i)).ThenBy(x => x.i.Id))
         {
             var servingAt = ComputeServingDateTime(plan, item);
             var deadline = servingAt.AddHours(-OrderDeadlineHours);
 
-            // Only show meals that can still be ordered
-            if (now > deadline) { if (servingAt.Date >= SchoolClock.WeekStart(today)) vm.ClosedCount++; continue; }
+            // Earlier days are not shown; today's and later meals are, locked once ordering closes
+            if (servingAt.Date < today) { if (servingAt.Date >= SchoolClock.WeekStart(today)) vm.ClosedCount++; continue; }
 
             var conflict = conflicts.FirstOrDefault(c => c.MealPlanItemId == item.Id);
             if (conflict is not null)
@@ -100,7 +101,9 @@ public class MealOrderService : IMealOrderService
                 OptionsInSlot = plan.Items.Count(i => i.DayOfWeek == item.DayOfWeek && i.MealType == item.MealType),
                 CurrentOrderStatus = existing?.Status.ToString(),
                 CurrentPortionSize = existing?.PortionSize.ToString(),
-                OrderedByLearner = existing is not null && learner.HasLogin && existing.OrderedByParentUserId == learner.UserId
+                OrderedByLearner = existing is not null && learner.HasLogin && existing.OrderedByParentUserId == learner.UserId,
+                IsOrderingClosed = now > deadline,
+                IsServingOver = now >= servingAt + servingDuration
             });
         }
 
@@ -167,12 +170,17 @@ public class MealOrderService : IMealOrderService
             : (true, $"{item.MenuDescription} ordered for {DayNames[item.DayOfWeek]} {item.MealType}{swapNote}.");
     }
 
-    public async Task CancelOrderAsync(int mealPlanItemId, int learnerId)
+    public async Task<(bool success, string message)> CancelOrderAsync(int mealPlanItemId, int learnerId)
     {
-        var order = await _db.MealPreOrders.FirstOrDefaultAsync(o => o.MealPlanItemId == mealPlanItemId && o.LearnerId == learnerId);
-        if (order is null) return;
+        var order = await _db.MealPreOrders.Include(o => o.MealPlanItem).ThenInclude(i => i.MealPlan)
+            .FirstOrDefaultAsync(o => o.MealPlanItemId == mealPlanItemId && o.LearnerId == learnerId);
+        if (order is null) return (false, "Order not found.");
+        // Same rule as ordering: once the deadline passes the tile is locked
+        if (SchoolClock.Now > ComputeServingDateTime(order.MealPlanItem.MealPlan, order.MealPlanItem).AddHours(-OrderDeadlineHours))
+            return (false, "Ordering for this meal has closed, so the order can no longer be cancelled.");
         order.Status = PreOrderStatus.Cancelled;
         await _db.SaveChangesAsync();
+        return (true, "Pre-order cancelled.");
     }
 
     public async Task<IList<PreOrderSummaryRow>> GetKitchenPreOrderSummaryAsync(int mealPlanId)

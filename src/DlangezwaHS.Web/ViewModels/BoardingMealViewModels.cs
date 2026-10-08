@@ -368,13 +368,16 @@ public class PreOrderMealRow
     public string? CurrentOrderStatus  { get; set; }
     public string? CurrentPortionSize  { get; set; }
     public bool    OrderedByLearner    { get; set; }
+    // Locked once the ordering deadline passes; greyed out once serving time is over
+    public bool    IsOrderingClosed    { get; set; }
+    public bool    IsServingOver       { get; set; }
 }
 
 public class PreOrderWeekViewModel
 {
     public int    LearnerId   { get; set; }
     public string LearnerName { get; set; } = "";
-    // Only meals that can still be ordered (deadline not passed, no allergy conflict)
+    // Today's and upcoming meals (no allergy conflict); closed ones are shown locked
     public IList<PreOrderMealRow> Meals { get; set; } = new List<PreOrderMealRow>();
     public int    ClosedCount { get; set; }
     public IList<string> HiddenForAllergy { get; set; } = new List<string>();
@@ -594,6 +597,7 @@ public class BoardingSettingsViewModel
     public string  LunchServe     { get; set; } = "13:00";
     public string  DinnerStart    { get; set; } = "15:00";
     public string  DinnerServe    { get; set; } = "18:00";
+    public int     ServingMinutes { get; set; } = 90;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -790,7 +794,25 @@ public class MealAttendanceLiveViewModel
     public IList<string> NotYetArrived { get; set; } = new List<string>();
     public int    FlaggedCount    { get; set; }
     public IList<MealServiceOptionRow> Options { get; set; } = new List<MealServiceOptionRow>();
+    // Set once "Finish Scanning" is pressed: stock deducted, usage and leftovers recorded
     public bool   IsFinalised     { get; set; }
+    public DateTime? FinishedAt   { get; set; }      // school time
+    public int    Leftovers       { get; set; }
+    public DateTime ServingStart  { get; set; }      // school time
+    public DateTime ServingEnd    { get; set; }
+    public bool   IsServingOver   { get; set; }
+    public IList<MealCollectedRow> Collected { get; set; } = new List<MealCollectedRow>();
+}
+
+// One learner scanned at a meal service — newest first on the scanner
+public class MealCollectedRow
+{
+    public string   LearnerName  { get; set; } = "";
+    public string   Meal         { get; set; } = "";
+    public string?  PortionSize  { get; set; }
+    public string   CollectedAt  { get; set; } = "";   // "07:12"
+    public bool     HasOrder     { get; set; }
+    public IList<string> Allergies { get; set; } = new List<string>();
 }
 
 public class MealServiceOptionRow
@@ -812,6 +834,8 @@ public class MealScanResult
     public string? PortionSize  { get; set; }
     public string? ImageUrl     { get; set; }
     public IList<string> Allergies { get; set; } = new List<string>();
+    public string? CollectedAt  { get; set; }   // "07:12" — when this scan (or the earlier one) was recorded
+    public string? Room         { get; set; }   // boarding room, if allocated
 }
 
 public class TodayMealOption
@@ -822,6 +846,9 @@ public class TodayMealOption
     public string ServingTime     { get; set; } = "";
     public int    OptionCount     { get; set; } = 1;
     public int    PreOrderCount   { get; set; }
+    public DateTime ServingStart  { get; set; }   // school time
+    public DateTime ServingEnd    { get; set; }
+    public bool   IsFinished      { get; set; }   // "Finish Scanning" pressed
 }
 
 public class MealAttendanceHistoryRow

@@ -5,7 +5,8 @@
     var types = new[] { "Breakfast", "Lunch", "Dinner" };
     string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
     var now = DlangezwaHS.Web.Services.SchoolClock.Now;
-    var slots = Model.Meals.GroupBy(m => (m.ServingDate, m.MealType)).ToList();
+    // Stats only count meals that can still be ordered; closed ones are shown locked
+    var slots = Model.Meals.Where(m => !m.IsOrderingClosed).GroupBy(m => (m.ServingDate, m.MealType)).ToList();
     var orderedSlots = slots.Count(s => s.Any(o => o.CurrentOrderStatus is "Confirmed" or "WaitListed"));
     var closingSoon = slots.Count(s => s.First().OrderDeadline <= now.AddHours(24) && !s.Any(o => o.CurrentOrderStatus is "Confirmed" or "WaitListed"));
     var days = Model.Meals.GroupBy(m => m.ServingDate).OrderBy(g => g.Key).ToList();
@@ -52,6 +53,16 @@
     .po-sizes input:focus-visible + span { outline: 2px solid var(--dhs-blue); }
     .po-deadline { font-size: .74rem; }
     .po-deadline.soon { color: #b45309; font-weight: 700; }
+
+    /* Ordering closed: the choice is locked. Serving over: the whole tile greys out */
+    .po-slot.locked .po-tile { cursor: default; }
+    .po-slot.locked .po-tile:hover, .po-slot.locked:hover { transform: none; }
+    .po-slot.locked .po-tile:hover .photo img { transform: none; }
+    .po-slot.over { background: #f1f5f9; border-color: #cbd5e1; box-shadow: none; }
+    .po-slot.over:hover { border-color: #cbd5e1; box-shadow: none; }
+    .po-slot.over .po-slot-head { background: #e2e8f0; color: #64748b; }
+    .po-slot.over .po-slot-body, .po-slot.over .po-foot { filter: grayscale(1); opacity: .6; }
+    .po-lock { font-size: .78rem; font-weight: 700; display: inline-flex; align-items: center; gap: .3rem; }
     #mealDetailImage { width: 100%; height: 230px; object-fit: cover; }
     .po-ph { height: 180px; background: #f1f5f9; color: #94a3b8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; font-size: .85rem; }
     .po-ph i { font-size: 2.4rem; }
@@ -74,13 +85,13 @@
     <div class="k-empty k-rise">
         <i class="bi bi-basket"></i>
         <strong>No meals are open for pre-ordering right now</strong>
-        @if (Model.ClosedCount > 0) { <p>@Model.ClosedCount meal(s) this week have already closed.</p> }
+        @if (Model.ClosedCount > 0) { <p>@Model.ClosedCount meal(s) earlier this week have already been served.</p> }
     </div>
 }
 else
 {
     <div class="row g-3 mb-4">
-        <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-egg-fried"></i>Open meals</div><div class="k-stat-value" data-count="@slots.Count">@slots.Count</div><div class="k-stat-note">over @days.Count day(s)</div></div></div>
+        <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-egg-fried"></i>Open meals</div><div class="k-stat-value" data-count="@slots.Count">@slots.Count</div><div class="k-stat-note">still open for ordering</div></div></div>
         <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Ordered</div><div class="k-stat-value" data-count="@orderedSlots">@orderedSlots</div><div class="k-stat-note">meals chosen</div></div></div>
         <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-hourglass-split"></i>Still to choose</div><div class="k-stat-value" data-count="@(slots.Count - orderedSlots)">@(slots.Count - orderedSlots)</div><div class="k-stat-note">no order yet</div></div></div>
         <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat @(closingSoon > 0 ? "danger" : "lunch")"><div class="k-stat-label"><i class="bi bi-alarm"></i>Closing soon</div><div class="k-stat-value" data-count="@closingSoon">@closingSoon</div><div class="k-stat-note">unordered, within 24 hours</div></div></div>
@@ -117,12 +128,16 @@ else
                         var ordered = slot.FirstOrDefault(o => o.CurrentOrderStatus is "Confirmed" or "WaitListed");
                         var slotKey = $"slot-{first.MealPlanItemId}";
                         var soon = first.OrderDeadline <= now.AddHours(24);
+                        var locked = first.IsOrderingClosed;
+                        var over = first.IsServingOver;
                         <div class="col-lg-4">
-                            <div class="po-slot @key @(ordered is not null ? "done" : "")">
+                            <div class="po-slot @key @(ordered is not null && !over ? "done" : "") @(locked ? "locked" : "") @(over ? "over" : "")">
                                 <div class="po-slot-head">
-                                    <span class="title"><i class="bi @TypeIcon(slot.Key)"></i>@slot.Key <span class="fw-normal small">· @first.ServingTime</span></span>
-                                    @if (ordered?.CurrentOrderStatus == "Confirmed") { <span class="k-pill ok"><i class="bi bi-check2"></i>Ordered</span> }
+                                    <span class="title"><i class="bi @(over ? "bi-lock-fill" : TypeIcon(slot.Key))"></i>@slot.Key <span class="fw-normal small">· @first.ServingTime</span></span>
+                                    @if (over) { <span class="po-lock"><i class="bi bi-lock-fill"></i>Serving over</span> }
+                                    else if (ordered?.CurrentOrderStatus == "Confirmed") { <span class="k-pill ok"><i class="bi @(locked ? "bi-lock-fill" : "bi-check2")"></i>Ordered</span> }
                                     else if (ordered?.CurrentOrderStatus == "WaitListed") { <span class="k-pill warn">Waitlisted</span> }
+                                    else if (locked) { <span class="po-lock"><i class="bi bi-lock-fill"></i>Closed</span> }
                                 </div>
                                 <div class="po-slot-body">
                                     @* One form per serving time: a single radio choice, so only one meal can be picked *@
@@ -140,7 +155,7 @@ else
                                                 }, jsonOpts);
                                                 <label class="po-tile" for="opt-@m.MealPlanItemId">
                                                     <input type="radio" name="mealPlanItemId" id="opt-@m.MealPlanItemId" value="@m.MealPlanItemId"
-                                                           checked="@(isOrdered || (ordered is null && slot.Count() == 1))" required />
+                                                           checked="@(isOrdered || (!locked && ordered is null && slot.Count() == 1))" disabled="@locked" required />
                                                     <span class="photo">
                                                         @if (!string.IsNullOrEmpty(m.ImageUrl)) { <img src="@m.ImageUrl" alt="@m.MenuDescription" loading="lazy" /> }
                                                         else { <i class="bi bi-egg-fried" aria-hidden="true"></i> }
@@ -160,6 +175,19 @@ else
                                     </form>
                                 </div>
                                 <div class="po-foot">
+                                    @if (locked)
+                                    {
+                                        @* Locked: show what was ordered (if anything); no ordering, changing or cancelling *@
+                                        var portion = ordered?.CurrentPortionSize is null ? "" : $" · {ordered.CurrentPortionSize} portion";
+                                        var lockNote = over ? "Serving time is over" : $"Ordering closed {first.OrderDeadline:ddd dd MMM HH:mm}";
+                                        <div class="w-100 small">
+                                            @if (ordered is not null) { <span><i class="bi bi-basket me-1"></i><strong>@ordered.MenuDescription</strong>@portion</span> }
+                                            else { <span class="k-sub">No meal was ordered.</span> }
+                                        </div>
+                                        <div class="w-100 po-deadline k-sub"><i class="bi bi-lock me-1"></i>@lockNote</div>
+                                    }
+                                    else
+                                    {
                                     <div class="po-sizes" role="radiogroup" aria-label="Portion size">
                                         @foreach (var size in new[] { "Small", "Regular", "Large" })
                                         {
@@ -179,6 +207,7 @@ else
                                         </form>
                                     }
                                     <div class="w-100 po-deadline @(soon && ordered is null ? "soon" : "k-sub")"><i class="bi bi-clock me-1"></i>Order by @first.OrderDeadline.ToString("ddd dd MMM HH:mm")@(soon && ordered is null ? " — closing soon" : "")</div>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -191,7 +220,7 @@ else
 
     @if (Model.ClosedCount > 0)
     {
-        <p class="k-sub mt-3"><i class="bi bi-clock-history me-1"></i>@Model.ClosedCount meal(s) this week have passed their ordering deadline and are no longer shown.</p>
+        <p class="k-sub mt-3"><i class="bi bi-clock-history me-1"></i>@Model.ClosedCount meal(s) from earlier this week are no longer shown.</p>
     }
 }
 

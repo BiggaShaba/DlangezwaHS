@@ -2,11 +2,32 @@
 @{
     ViewData["Title"] = "Meal Scanner";
     var live = (MealAttendanceLiveViewModel)ViewBag.Live;
+    var services = (IList<TodayMealOption>)ViewBag.Services;
     var key = live.MealType.ToLowerInvariant();
+    var now = DlangezwaHS.Web.Services.SchoolClock.Now;
+    var isLive = !live.IsFinalised && live.ServingStart <= now && now < live.ServingEnd;
     string TypeIcon(string t) => t switch { "Breakfast" => "bi-sunrise", "Lunch" => "bi-sun", _ => "bi-moon-stars" };
+    // Minutes since midnight (school time) — lets the page notice when the next serving time starts
+    int Minutes(DateTime d) => (int)(d - d.Date).TotalMinutes;
+    var serviceTimes = services.Select(s => new { id = s.MealPlanItemId, start = Minutes(s.ServingStart), end = Minutes(s.ServingEnd), finished = s.IsFinished });
 }
 
 <style>
+    .ms-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; }
+    .ms-tab { position: relative; display: flex; align-items: center; gap: .7rem; padding: .75rem .9rem; border-radius: 18px; background: #fff; border: 2px solid #e2e8f0;
+        color: var(--dhs-navy); text-decoration: none; transition: transform .3s var(--ease-spring), border-color .2s, box-shadow .25s; }
+    .ms-tab:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); color: var(--dhs-navy); }
+    .ms-tab.breakfast { --k-accent: var(--k-breakfast); } .ms-tab.lunch { --k-accent: var(--k-lunch); } .ms-tab.dinner { --k-accent: var(--k-dinner); }
+    .ms-tab .ico { width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px; display: grid; place-items: center; font-size: 1.2rem; color: #fff; background: var(--k-accent); }
+    .ms-tab .name { font-weight: 800; line-height: 1.1; }
+    .ms-tab .when { font-size: .76rem; color: var(--dhs-grey); }
+    .ms-tab.active { border-color: var(--k-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-accent) 25%, transparent); }
+    .ms-tab.none { pointer-events: none; opacity: .45; }
+    .ms-tab.none .ico { background: #94a3b8; }
+    .ms-tab .now { position: absolute; top: -.55rem; right: .7rem; font-size: .68rem; font-weight: 800; color: #fff; background: #10b981; border-radius: 999px; padding: .1rem .5rem; }
+    .ms-tab .now.done { background: #64748b; }
+    @@media (max-width: 575.98px) { .ms-tab { flex-direction: column; text-align: center; gap: .3rem; padding: .7rem .4rem; } .ms-tab .when { font-size: .7rem; } }
+
     .ms-reader-wrap { position: relative; border-radius: 22px; overflow: hidden; background: #0b1220; min-height: 280px; box-shadow: var(--shadow-ambient); }
     #reader { min-height: 280px; }
     #reader video { object-fit: cover; }
@@ -24,64 +45,132 @@
     @@keyframes ms-pop { from { transform: scale(.94); } }
     .ms-meal { font-size: 1.7rem; font-weight: 800; line-height: 1.15; color: var(--dhs-navy); }
     .ms-result img { width: 96px; height: 96px; object-fit: cover; border-radius: 18px; }
-    .ms-state { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 1.4rem; color: #fff; }
+    .ms-state { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 1.4rem; color: #fff; flex-shrink: 0; }
     .ms-result.ok .ms-state { background: #10b981; } .ms-result.warn .ms-state { background: #f59e0b; } .ms-result.bad .ms-state { background: #ef4444; }
+    .ms-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; }
+    .ms-allergy { margin-top: .6rem; padding: .6rem .8rem; border-radius: 14px; background: #fee2e2; color: #991b1b; font-weight: 700; }
     .ms-bump { animation: ms-bump .5s cubic-bezier(.34,1.56,.64,1); }
     @@keyframes ms-bump { 40% { transform: scale(1.25); } }
-    @@media (prefers-reduced-motion: reduce) { .ms-line, .ms-result.pop, .ms-bump { animation: none; } }
+    .ms-finished { border-radius: 22px; padding: 1.6rem; background: #f8fafc; border: 2px dashed #cbd5e1; text-align: center; }
+    .ms-finished i.big { font-size: 2.6rem; color: #10b981; }
+    .ms-collected td { vertical-align: middle; }
+    @@media (prefers-reduced-motion: reduce) { .ms-line, .ms-result.pop, .ms-bump, .ms-tab { animation: none; transition: none; } }
 </style>
 
 <div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
     <div>
         <h2><i class="bi @TypeIcon(live.MealType) me-2"></i>@live.DayLabel @live.MealType</h2>
-        <p>@live.MenuDescription</p>
+        <p>@live.MenuDescription · served @live.ServingStart.ToString("HH:mm")–@live.ServingEnd.ToString("HH:mm")</p>
     </div>
-    <a asp-action="MealScanner" class="k-btn k-btn-light"><i class="bi bi-arrow-left-right"></i>Change meal</a>
+    <a asp-action="MealAttendance" class="k-btn k-btn-light"><i class="bi bi-clock-history"></i>Attendance history</a>
 </div>
+
+@* Serving-time selector: one tab per meal; the meal being served now opens first *@
+<nav class="ms-tabs mb-3 k-rise" aria-label="Serving time">
+    @foreach (var type in new[] { "Breakfast", "Lunch", "Dinner" })
+    {
+        var svc = services.FirstOrDefault(s => s.MealType == type);
+        var tkey = type.ToLowerInvariant();
+        if (svc is null)
+        {
+            <span class="ms-tab @tkey none" aria-disabled="true">
+                <span class="ico"><i class="bi @TypeIcon(type)" aria-hidden="true"></i></span>
+                <span><span class="name d-block">@type</span><span class="when">Not served today</span></span>
+            </span>
+            continue;
+        }
+        var svcLive = !svc.IsFinished && svc.ServingStart <= now && now < svc.ServingEnd;
+        var when = svc.IsFinished ? "Scanning finished"
+            : svcLive ? $"Serving until {svc.ServingEnd:HH:mm}"
+            : now < svc.ServingStart ? $"Starts {svc.ServingStart:HH:mm}"
+            : $"Ended {svc.ServingEnd:HH:mm} · not finished";
+        <a class="ms-tab @tkey @(svc.MealPlanItemId == Model ? "active" : "")" asp-action="MealScanner" asp-route-mealPlanItemId="@svc.MealPlanItemId"
+           aria-current="@(svc.MealPlanItemId == Model ? "page" : null)">
+            @if (svcLive) { <span class="now">SERVING NOW</span> }
+            else if (svc.IsFinished) { <span class="now done">DONE</span> }
+            <span class="ico"><i class="bi @TypeIcon(type)" aria-hidden="true"></i></span>
+            <span><span class="name d-block">@type</span><span class="when">@when · @svc.PreOrderCount order(s)</span></span>
+        </a>
+    }
+</nav>
+
+@if (!live.IsFinalised && live.IsServingOver)
+{
+    <div class="k-card mb-3 k-rise" style="border-color:#fde68a;background:#fffbeb">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <i class="bi bi-alarm fs-5" style="color:#d97706"></i>
+            <div class="flex-grow-1"><strong style="color:#92400e">Serving time is over.</strong>
+                <span class="small" style="color:#92400e">Press <strong>Finish Scanning</strong> below to deduct the stock used and record the leftovers.</span></div>
+        </div>
+    </div>
+}
+else if (!live.IsFinalised && now < live.ServingStart)
+{
+    <div class="k-card mb-3 k-rise" style="border-color:#bfdbfe;background:#eff6ff">
+        <i class="bi bi-hourglass-split me-1" style="color:var(--dhs-blue-dark)"></i>
+        <span class="small">@live.MealType is served from <strong>@live.ServingStart.ToString("HH:mm")</strong>. You can already scan early collections — this page switches to the meal being served when its time starts.</span>
+    </div>
+}
 
 <div class="row g-3 mb-3">
     <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat @key"><div class="k-stat-label"><i class="bi bi-basket"></i>Ordered</div><div class="k-stat-value" id="statExpected">@live.TotalExpected</div><div class="k-stat-note">confirmed pre-orders</div></div></div>
     <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat" style="--k-accent:#10b981"><div class="k-stat-label"><i class="bi bi-check2-circle"></i>Served</div><div class="k-stat-value" id="statScanned">@live.ScannedCount</div><div class="k-stat-note">collected so far</div></div></div>
-    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-hourglass-split"></i>Still to come</div><div class="k-stat-value" id="statWaiting">@live.NotYetArrived.Count</div><div class="k-stat-note">ordered, not scanned</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-hourglass-split"></i>@(live.IsFinalised ? "Absent" : "Still to come")</div><div class="k-stat-value" id="statWaiting">@live.NotYetArrived.Count</div><div class="k-stat-note">@(live.IsFinalised ? "ordered, didn't collect" : "ordered, not scanned")</div></div></div>
     <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-flag"></i>No order</div><div class="k-stat-value" id="statFlagged">@live.FlaggedCount</div><div class="k-stat-note">flagged walk-ins</div></div></div>
 </div>
 
-<div class="row g-3">
-    <div class="col-md-6 k-rise" style="--i:4">
-        <div class="ms-reader-wrap">
-            <div id="reader"></div>
-            <div class="ms-frame" aria-hidden="true"></div>
-            <div class="ms-line" aria-hidden="true"></div>
-        </div>
-        <div class="input-group mt-2">
-            <input type="text" id="manualHash" class="form-control k-input" style="border-radius:12px 0 0 12px !important" placeholder="Or type / paste the badge code…" aria-label="Badge code" />
-            <button class="k-btn k-btn-primary" style="border-radius:0 12px 12px 0" id="manualCheck">Check</button>
-        </div>
+@if (live.IsFinalised)
+{
+    <div class="ms-finished mb-3 k-rise" style="--i:4">
+        <i class="bi bi-check2-circle big d-block mb-2" aria-hidden="true"></i>
+        <h3 class="k-title mb-1">Scanning finished@(live.FinishedAt is { } fin ? $" at {fin:HH:mm}" : "")</h3>
+        <p class="k-sub mb-3">The servings prepared were deducted from stock by recipe, and <strong>@live.Leftovers</strong> uncollected serving(s) were recorded as leftovers.</p>
+        <a asp-action="RecordUsage" asp-route-mealPlanItemId="@Model" class="k-btn k-btn-primary"><i class="bi bi-clipboard-data"></i>View usage &amp; leftovers</a>
     </div>
-    <div class="col-md-6 k-rise" style="--i:5">
-        <div class="ms-result" id="orderCard" aria-live="polite">
-            <div class="text-center" id="orderIdle">
-                <i class="bi bi-person-badge d-block mb-2" style="font-size:2.6rem;color:var(--dhs-blue-dark)"></i>
-                <div class="fw-bold" style="color:var(--dhs-navy)">Ready to scan</div>
-                <div class="k-sub">Hold a learner's badge up to the camera to see what they ordered.</div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-md-6 k-rise" style="--i:4">
+            <div class="ms-reader-wrap">
+                <div id="reader"></div>
+                <div class="ms-frame" aria-hidden="true"></div>
+                <div class="ms-line" aria-hidden="true"></div>
             </div>
-            <div id="orderResult" hidden>
-                <div class="d-flex align-items-center gap-2 mb-2">
-                    <span class="ms-state" id="resState"><i class="bi bi-check-lg"></i></span>
-                    <div><div class="fw-bold" style="color:var(--dhs-navy)" id="resLearner"></div><div class="k-sub" id="resMessage"></div></div>
+            <div class="input-group mt-2">
+                <input type="text" id="manualHash" class="form-control k-input" style="border-radius:12px 0 0 12px !important" placeholder="Or type / paste the badge code…" aria-label="Badge code" />
+                <button class="k-btn k-btn-primary" style="border-radius:0 12px 12px 0" id="manualCheck">Check</button>
+            </div>
+        </div>
+        <div class="col-md-6 k-rise" style="--i:5">
+            <div class="ms-result" id="orderCard" aria-live="polite">
+                <div class="text-center" id="orderIdle">
+                    <i class="bi bi-person-badge d-block mb-2" style="font-size:2.6rem;color:var(--dhs-blue-dark)"></i>
+                    <div class="fw-bold" style="color:var(--dhs-navy)">Ready to scan</div>
+                    <div class="k-sub">Hold a learner's badge up to the camera to see their order, allergies and collection time.</div>
                 </div>
-                <div class="d-flex gap-3 align-items-center my-2">
-                    <img id="resImage" alt="" hidden />
-                    <div>
-                        <div class="ms-meal" id="resMeal"></div>
-                        <div class="fw-semibold" id="resPortion"></div>
+                <div id="orderResult" hidden>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="ms-state" id="resState"><i class="bi bi-check-lg"></i></span>
+                        <div><div class="fw-bold" style="color:var(--dhs-navy)" id="resLearner"></div><div class="k-sub" id="resMessage"></div></div>
                     </div>
+                    <div class="d-flex gap-3 align-items-center my-2">
+                        <img id="resImage" alt="" hidden />
+                        <div>
+                            <div class="ms-meal" id="resMeal"></div>
+                            <div class="fw-semibold" id="resPortion"></div>
+                        </div>
+                    </div>
+                    <div class="ms-facts">
+                        <span class="k-pill" id="resTime" hidden></span>
+                        <span class="k-pill" id="resRoom" hidden></span>
+                    </div>
+                    <div class="ms-allergy" id="resAllergies" hidden></div>
                 </div>
-                <div class="k-pill danger mt-2" id="resAllergies" hidden></div>
             </div>
         </div>
     </div>
-</div>
+}
 
 <div class="row g-3 mt-1">
     <div class="col-lg-6 k-rise" style="--i:6">
@@ -107,7 +196,7 @@
     </div>
     <div class="col-lg-6 k-rise" style="--i:7">
         <div class="k-card h-100">
-            <div class="k-card-head"><div><h3 class="k-title">Still to come</h3><p class="k-sub"><span id="waitingCount">@live.NotYetArrived.Count</span> learner(s) ordered but haven't been scanned</p></div></div>
+            <div class="k-card-head"><div><h3 class="k-title">@(live.IsFinalised ? "Didn't collect" : "Still to come")</h3><p class="k-sub"><span id="waitingCount">@live.NotYetArrived.Count</span> learner(s) ordered but @(live.IsFinalised ? "were marked absent" : "haven't been scanned")</p></div></div>
             <div class="d-flex flex-wrap gap-1" id="waitingList">
                 @foreach (var n in live.NotYetArrived) { <span class="k-pill">@n</span> }
             </div>
@@ -116,38 +205,82 @@
 </div>
 
 <div class="k-card mt-3 k-rise" style="--i:8">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-            <h3 class="k-title">Close collection</h3>
-            <p class="k-sub mb-0">Learners who ordered but didn't collect are marked absent. The servings prepared are deducted from stock by recipe and the uncollected ones are recorded as leftovers.</p>
-        </div>
-        @if (live.IsFinalised)
-        {
-            <span class="k-pill ok"><i class="bi bi-check2-circle"></i>Collection closed</span>
-        }
-        else
-        {
-            <button type="button" class="k-btn k-btn-primary" id="finaliseBtn"><i class="bi bi-check2-circle"></i>Close Collection</button>
-        }
+    <div class="k-card-head"><div><h3 class="k-title">Collected</h3><p class="k-sub"><span id="collectedCount">@live.Collected.Count</span> learner(s) scanned, newest first</p></div></div>
+    <div class="table-responsive">
+        <table class="k-table ms-collected">
+            <thead><tr><th>Time</th><th>Learner</th><th>Order</th><th>Portion</th><th>Allergies</th></tr></thead>
+            <tbody id="collectedBody">
+            @foreach (var c in live.Collected)
+            {
+                <tr>
+                    <td class="fw-semibold">@c.CollectedAt</td>
+                    <td>@c.LearnerName</td>
+                    <td>@if (c.HasOrder) { @c.Meal } else { <span class="k-pill danger">No pre-order</span> }</td>
+                    <td>@(c.PortionSize ?? "—")</td>
+                    <td>@if (c.Allergies.Any()) { <span class="k-pill danger">@string.Join(", ", c.Allergies)</span> } else { <span class="k-sub">None</span> }</td>
+                </tr>
+            }
+            </tbody>
+        </table>
     </div>
-    <form method="post" asp-action="FinalizeAttendance" class="mt-3 p-3 d-flex gap-2 align-items-center flex-wrap" id="finaliseConfirm" hidden data-busy
-          style="border-radius:16px;background:#fff7ed">
-        @Html.AntiForgeryToken()
-        <input type="hidden" name="mealPlanItemId" value="@Model" />
-        <span class="small">Close now? <strong id="confirmWaiting">@live.NotYetArrived.Count</strong> learner(s) will be marked absent.</span>
-        <button type="submit" class="k-btn k-btn-danger k-btn-sm" data-busy-text="Closing…">Yes, close collection</button>
-        <button type="button" class="k-btn k-btn-ghost k-btn-sm" id="finaliseCancel">Keep scanning</button>
-    </form>
+    <p class="k-sub mb-0 mt-2" id="collectedEmpty" hidden="@live.Collected.Any()">Nobody has been scanned yet.</p>
 </div>
 
+@if (!live.IsFinalised)
+{
+    <div class="k-card mt-3 k-rise" style="--i:9">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h3 class="k-title">Finish scanning</h3>
+                <p class="k-sub mb-0">Ends this meal's scanning. Learners who ordered but didn't collect are marked absent, the servings prepared are deducted from stock by recipe, and uncollected servings are recorded as leftovers.</p>
+            </div>
+            <button type="button" class="k-btn k-btn-primary" id="finaliseBtn"><i class="bi bi-flag-fill"></i>Finish Scanning</button>
+        </div>
+        <form method="post" asp-action="FinalizeAttendance" class="mt-3 p-3 d-flex gap-2 align-items-center flex-wrap" id="finaliseConfirm" hidden data-busy
+              style="border-radius:16px;background:#fff7ed">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="mealPlanItemId" value="@Model" />
+            <span class="small">Finish now? <strong id="confirmWaiting">@live.NotYetArrived.Count</strong> learner(s) will be marked absent and stock will be deducted.</span>
+            <button type="submit" class="k-btn k-btn-danger k-btn-sm" data-busy-text="Finishing…">Yes, finish scanning</button>
+            <button type="button" class="k-btn k-btn-ghost k-btn-sm" id="finaliseCancel">Keep scanning</button>
+        </form>
+    </div>
+}
+else
+{
+    @Html.AntiForgeryToken()
+}
+
 @section Scripts {
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    @if (!live.IsFinalised)
+    {
+        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    }
     <script>
         const MEAL_PLAN_ITEM_ID = @Model;
+        const FINISHED = @(live.IsFinalised ? "true" : "false");
         const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]').value;
         let lastHash = '', scanLock = false;
 
-        if (typeof Html5Qrcode !== 'undefined') {
+        // ── Open the meal being served as soon as its serving time starts ──
+        const SERVICES = @Json.Serialize(serviceTimes);
+        const SERVER_MINUTES = @Minutes(now) + @now.Second / 60;
+        const LOADED_AT = Date.now();
+        const WAS_LIVE = @(isLive ? "true" : "false");
+        const nowMinutes = () => SERVER_MINUTES + (Date.now() - LOADED_AT) / 60000;
+        const isServing = (s, m) => !s.finished && s.start <= m && m < s.end;
+        setInterval(() => {
+            const m = nowMinutes();
+            const current = SERVICES.find(s => s.id === MEAL_PLAN_ITEM_ID);
+            const serving = SERVICES.find(s => isServing(s, m));
+            if (serving && serving.id !== MEAL_PLAN_ITEM_ID && !(current && isServing(current, m))) {
+                location.href = '@Url.Action("MealScanner", "KitchenStaff")?mealPlanItemId=' + serving.id;
+            } else if (WAS_LIVE && current && m >= current.end) {
+                location.reload(); // serving just ended — show the "finish scanning" reminder
+            }
+        }, 30000);
+
+        if (!FINISHED && typeof Html5Qrcode !== 'undefined') {
             const html5QrCode = new Html5Qrcode("reader");
             Html5Qrcode.getCameras().then(cameras => {
                 if (!cameras.length) return;
@@ -163,8 +296,8 @@
             processHash(decodedText);
         }
 
-        document.getElementById('manualCheck').addEventListener('click', () => processHash(document.getElementById('manualHash').value));
-        document.getElementById('manualHash').addEventListener('keydown', e => { if (e.key === 'Enter') processHash(e.target.value); });
+        document.getElementById('manualCheck')?.addEventListener('click', () => processHash(document.getElementById('manualHash').value));
+        document.getElementById('manualHash')?.addEventListener('keydown', e => { if (e.key === 'Enter') processHash(e.target.value); });
 
         async function processHash(hash) {
             hash = (hash || '').trim();
@@ -177,6 +310,12 @@
             showResult(await res.json());
             document.getElementById('manualHash').value = '';
             refreshLive();
+        }
+
+        function pill(id, text) {
+            const el = document.getElementById(id);
+            el.hidden = !text;
+            el.textContent = text || '';
         }
 
         function showResult(d) {
@@ -194,9 +333,9 @@
             const img = document.getElementById('resImage');
             img.hidden = !d.imageUrl;
             if (d.imageUrl) img.src = d.imageUrl;
-            const allergies = document.getElementById('resAllergies');
-            allergies.hidden = !(d.allergies && d.allergies.length);
-            allergies.textContent = d.allergies && d.allergies.length ? '⚠ Allergies: ' + d.allergies.join(', ') : '';
+            pill('resTime', d.collectedAt ? '🕒 Collected ' + d.collectedAt : '');
+            pill('resRoom', d.room ? '🛏 Room ' + d.room : '');
+            pill('resAllergies', d.allergies && d.allergies.length ? '⚠ Allergies: ' + d.allergies.join(', ') : '');
         }
 
         function setStat(id, value) {
@@ -204,6 +343,13 @@
             if (el.textContent === String(value)) return;
             el.textContent = value;
             el.classList.remove('ms-bump'); void el.offsetWidth; el.classList.add('ms-bump');
+        }
+
+        function cell(row, text, cls) {
+            const td = row.insertCell();
+            if (cls) { const s = document.createElement('span'); s.className = cls; s.textContent = text; td.appendChild(s); }
+            else td.textContent = text;
+            return td;
         }
 
         async function refreshLive() {
@@ -214,7 +360,8 @@
             setStat('statWaiting', l.notYetArrived.length);
             setStat('statFlagged', l.flaggedCount);
             document.getElementById('waitingCount').textContent = l.notYetArrived.length;
-            document.getElementById('confirmWaiting').textContent = l.notYetArrived.length;
+            const confirm = document.getElementById('confirmWaiting');
+            if (confirm) confirm.textContent = l.notYetArrived.length;
             const list = document.getElementById('waitingList');
             list.innerHTML = '';
             l.notYetArrived.forEach(n => { const s = document.createElement('span'); s.className = 'k-pill'; s.textContent = n; list.appendChild(s); });
@@ -225,6 +372,18 @@
                 row.querySelector('[data-served]').textContent = o.served;
                 row.querySelector('.k-meter span').style.width = (o.ordered ? Math.min(100, o.served / o.ordered * 100) : 0) + '%';
             });
+            const body = document.getElementById('collectedBody');
+            body.innerHTML = '';
+            l.collected.forEach(c => {
+                const row = body.insertRow();
+                cell(row, c.collectedAt).className = 'fw-semibold';
+                cell(row, c.learnerName);
+                c.hasOrder ? cell(row, c.meal) : cell(row, 'No pre-order', 'k-pill danger');
+                cell(row, c.portionSize || '—');
+                c.allergies.length ? cell(row, c.allergies.join(', '), 'k-pill danger') : cell(row, 'None', 'k-sub');
+            });
+            document.getElementById('collectedCount').textContent = l.collected.length;
+            document.getElementById('collectedEmpty').hidden = l.collected.length > 0;
         }
 
         const finaliseBtn = document.getElementById('finaliseBtn');

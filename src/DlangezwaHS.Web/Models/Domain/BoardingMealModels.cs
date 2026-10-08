@@ -174,6 +174,8 @@ public class MealPlanItem
     [StringLength(10)] public string ServingTime { get; set; } = ""; // "07:30"
     // Calculated from the meal's ingredient quantities × latest receipt prices
     public decimal EstimatedCostPerHead { get; set; }
+    // Set when kitchen staff press "Finish Scanning" for this meal service (UTC)
+    public DateTime? ScanningFinishedAt { get; set; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,6 +378,12 @@ public class BoardingSettings
     [StringLength(5)] public string LunchServe { get; set; } = "13:00";
     [StringLength(5)] public string DinnerStart { get; set; } = "15:00";
     [StringLength(5)] public string DinnerServe { get; set; } = "18:00";
+
+    // How long each meal is served for. Once it ends, pre-order tiles grey out and the
+    // meal scanner moves on to the next serving time.
+    public int ServingMinutes { get; set; } = 90;
+
+    public TimeSpan ServingDuration => TimeSpan.FromMinutes(ServingMinutes > 0 ? ServingMinutes : 90);
 
     public (string Start, string Serve) ShiftFor(MealType type) => type switch
     {

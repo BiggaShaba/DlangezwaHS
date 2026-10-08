@@ -452,15 +452,30 @@ public class KitchenStaffController : Controller
 
     public async Task<IActionResult> MealScanner(int? mealPlanItemId)
     {
+        var services = await _attendanceSvc.GetTodaysMealsAsync();
         if (mealPlanItemId is null or 0)
         {
-            ViewBag.Today = SchoolClock.Today;
-            ViewBag.NextService = await _attendanceSvc.DescribeNextMealServiceAsync();
-            return View("MealScannerPicker", await _attendanceSvc.GetTodaysMealsAsync());
+            if (!services.Any())
+            {
+                ViewBag.Today = SchoolClock.Today;
+                ViewBag.NextService = await _attendanceSvc.DescribeNextMealServiceAsync();
+                return View("MealScannerPicker", services);
+            }
+            mealPlanItemId = CurrentService(services).MealPlanItemId;
         }
 
+        ViewBag.Services = services;
         ViewBag.Live = await _attendanceSvc.GetLiveDashboardAsync(mealPlanItemId.Value);
         return View(mealPlanItemId.Value);
+    }
+
+    // The service being served now; otherwise the next one today; otherwise the last one
+    private static TodayMealOption CurrentService(IList<TodayMealOption> services)
+    {
+        var now = SchoolClock.Now;
+        return services.FirstOrDefault(s => s.ServingStart <= now && now < s.ServingEnd)
+            ?? services.Where(s => s.ServingStart > now).OrderBy(s => s.ServingStart).FirstOrDefault()
+            ?? services.OrderBy(s => s.ServingStart).Last();
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -476,8 +491,8 @@ public class KitchenStaffController : Controller
     {
         var (absent, usage) = await _attendanceSvc.FinalizeAttendanceAsync(mealPlanItemId, UserId);
         var msg = absent > 0
-            ? $"Meal collection closed. {absent} learner(s) who ordered but did not collect were marked absent."
-            : "Meal collection closed — everyone who ordered collected their meal.";
+            ? $"Scanning finished. {absent} learner(s) who ordered but did not collect were marked absent."
+            : "Scanning finished — everyone who ordered collected their meal.";
         if (usage.Prepared > 0)
             msg += $" {usage.Prepared} serving(s) deducted from stock by recipe; {usage.Leftovers} left over.";
         if (usage.Shortages.Any())

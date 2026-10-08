@@ -532,6 +532,7 @@ public class AdminController : Controller
         settings.LunchServe = vm.LunchServe;
         settings.DinnerStart = vm.DinnerStart;
         settings.DinnerServe = vm.DinnerServe;
+        settings.ServingMinutes = Math.Clamp(vm.ServingMinutes, 15, 240);
         await _db.SaveChangesAsync();
         TempData["Success"] = "Boarding settings saved.";
         return RedirectToAction(nameof(Settings));

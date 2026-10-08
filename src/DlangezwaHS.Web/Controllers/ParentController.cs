@@ -707,8 +707,8 @@ public class ParentController : Controller
         var learner = await _db.Learners.FirstOrDefaultAsync(l => l.Id == learnerId && l.ParentId == userId);
         if (learner is null) return NotFound();
 
-        await _mealOrderSvc.CancelOrderAsync(mealPlanItemId, learnerId);
-        TempData["Success"] = "Pre-order cancelled.";
+        var (success, message) = await _mealOrderSvc.CancelOrderAsync(mealPlanItemId, learnerId);
+        TempData[success ? "Success" : "Error"] = message;
         return RedirectToAction(nameof(PreOrder), new { learnerId });
     }
 
