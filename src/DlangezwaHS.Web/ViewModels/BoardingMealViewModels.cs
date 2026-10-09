@@ -598,6 +598,8 @@ public class BoardingSettingsViewModel
     public string  DinnerStart    { get; set; } = "15:00";
     public string  DinnerServe    { get; set; } = "18:00";
     public int     ServingMinutes { get; set; } = 90;
+    public string  CurfewStart    { get; set; } = "19:00";
+    public string  CurfewEnd      { get; set; } = "06:00";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

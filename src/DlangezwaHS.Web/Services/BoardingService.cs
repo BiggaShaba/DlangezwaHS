@@ -132,30 +132,38 @@ public class BoardingService : IBoardingService
 
     private async Task<BoardingScanResult> ProcessCheckOutAsync(Learner learner, string qrHash)
     {
-        var today = DateTime.UtcNow.Date;
-        var leaveRequest = await _db.LeaveRequests
+        var now = SchoolClock.Now;
+        var today = now.Date;
+        var settings = await _db.BoardingSettings.FirstOrDefaultAsync() ?? new BoardingSettings();
+        var curfew = settings.IsCurfew(now);
+
+        // An approved leave request covering today that hasn't been used to check out yet
+        var leaveRequests = await _db.LeaveRequests
             .Where(r => r.LearnerId == learner.Id
                      && r.Status == LeaveRequestStatus.Approved
                      && r.DepartureDate.Date <= today
                      && r.ExpectedReturnDate.Date >= today)
             .OrderByDescending(r => r.CreatedAt)
-            .FirstOrDefaultAsync();
+            .ToListAsync();
+        var usedIds = await _db.BoardingMovements
+            .Where(m => m.LeaveRequestId != null && m.MovementType == MovementType.CheckOut && m.LearnerId == learner.Id)
+            .Select(m => m.LeaveRequestId!.Value).ToListAsync();
+        var leaveRequest = leaveRequests.FirstOrDefault(r => !usedIds.Contains(r.Id));
 
         if (leaveRequest is null)
-            return new BoardingScanResult
-            {
-                IsValid = false, LearnerName = learner.FullName, Status = "Rejected",
-                Message = "No approved leave request for today. Checkout denied."
-            };
+        {
+            // Curfew: nobody leaves without approved leave
+            if (curfew)
+                return new BoardingScanResult
+                {
+                    IsValid = false, LearnerName = learner.FullName, Status = "Rejected",
+                    Message = leaveRequests.Any()
+                        ? "Curfew is in force and this learner's leave has already been used. Checkout denied."
+                        : $"Curfew is in force ({settings.CurfewStart}–{settings.CurfewEnd}). Only learners with approved leave may check out."
+                };
 
-        bool alreadyUsed = await _db.BoardingMovements
-            .AnyAsync(m => m.LeaveRequestId == leaveRequest.Id && m.MovementType == MovementType.CheckOut);
-        if (alreadyUsed)
-            return new BoardingScanResult
-            {
-                IsValid = false, LearnerName = learner.FullName, Status = "Rejected",
-                Message = "This leave request has already been used to check out."
-            };
+            return await ProcessDayOutAsync(learner, qrHash, today.Add(settings.CurfewStartTime), settings.CurfewStart);
+        }
 
         var movement = new BoardingMovement
         {
@@ -178,6 +186,29 @@ public class BoardingService : IBoardingService
         {
             IsValid = true, LearnerName = learner.FullName, Status = "OnTime",
             Message = $"Checked out. Expected back {leaveRequest.ExpectedReturnDate:dd MMM yyyy}."
+        };
+    }
+
+    // Outside curfew a learner may go out without a leave request, but must be back by curfew
+    private async Task<BoardingScanResult> ProcessDayOutAsync(Learner learner, string qrHash, DateTime backBySchoolTime, string curfewStart)
+    {
+        _db.BoardingMovements.Add(new BoardingMovement
+        {
+            LearnerId = learner.Id,
+            MovementType = MovementType.CheckOut,
+            QrHash = qrHash,
+            ScannedAt = DateTime.UtcNow,
+            // Movement times are stored in UTC; school time is UTC+2
+            ExpectedReturnTime = backBySchoolTime.AddHours(-2),
+            Status = MovementStatus.OnTime,
+            Purpose = "Out before curfew"
+        });
+        await _db.SaveChangesAsync();
+
+        return new BoardingScanResult
+        {
+            IsValid = true, LearnerName = learner.FullName, Status = "OnTime",
+            Message = $"Checked out (no leave needed before curfew). Must be back by {curfewStart}."
         };
     }
 

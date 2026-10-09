@@ -36,14 +36,14 @@
 <div class="page-header k-header d-flex justify-content-between align-items-center flex-wrap gap-3">
     <div>
         <h2><i class="bi bi-qr-code-scan me-2"></i>Check-In / Out</h2>
-        <p>Scan a learner's boarding badge — leaving needs approved leave for today; returns after the expected time are flagged late</p>
+        <p>Scan a learner's boarding badge — learners may go out until curfew and must be back by then; during curfew only approved leave allows check-out. Late returns are flagged</p>
     </div>
     <a asp-action="Dashboard" class="k-btn k-btn-light"><i class="bi bi-speedometer2"></i>Dashboard</a>
 </div>
 
 <div class="row g-3 mb-3">
     <div class="col-6 col-lg-3 k-rise" style="--i:0"><div class="k-stat"><div class="k-stat-label"><i class="bi bi-house-check"></i>In now</div><div class="k-stat-value" id="statIn" data-count="@Math.Max(0, Model.TotalBoarders - Model.CurrentlyOut.Count)">@Math.Max(0, Model.TotalBoarders - Model.CurrentlyOut.Count)</div><div class="k-stat-note">of @Model.TotalBoarders boarders</div></div></div>
-    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-box-arrow-right"></i>Out now</div><div class="k-stat-value" id="statOut" data-count="@Model.CurrentlyOut.Count">@Model.CurrentlyOut.Count</div><div class="k-stat-note">on approved leave</div></div></div>
+    <div class="col-6 col-lg-3 k-rise" style="--i:1"><div class="k-stat lunch"><div class="k-stat-label"><i class="bi bi-box-arrow-right"></i>Out now</div><div class="k-stat-value" id="statOut" data-count="@Model.CurrentlyOut.Count">@Model.CurrentlyOut.Count</div><div class="k-stat-note">on leave or out before curfew</div></div></div>
     <div class="col-6 col-lg-3 k-rise" style="--i:2"><div class="k-stat danger"><div class="k-stat-label"><i class="bi bi-alarm"></i>Overdue</div><div class="k-stat-value" data-count="@overdue">@overdue</div><div class="k-stat-note">past their return time</div></div></div>
     <div class="col-6 col-lg-3 k-rise" style="--i:3"><div class="k-stat breakfast"><div class="k-stat-label"><i class="bi bi-upc-scan"></i>Scanned</div><div class="k-stat-value" id="statScans">0</div><div class="k-stat-note">on this screen</div></div></div>
 </div>

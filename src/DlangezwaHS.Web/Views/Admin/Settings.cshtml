@@ -394,6 +394,19 @@
                                 <input name="ServingMinutes" type="number" min="15" max="240" class="form-control form-control-sm" value="@boardingSettings.ServingMinutes" required />
                                 <div class="form-text">How long each meal is served after its serving time. When it ends, pre-order tiles lock and grey out, and the meal scanner moves on to the next meal.</div>
                             </div>
+
+                            <h6 class="fw-bold mt-4 mb-1">Boarding Curfew</h6>
+                            <p class="small text-muted">During curfew only learners with approved leave can be checked out. Outside curfew learners can be checked out without leave and must be back by the time curfew starts — later check-ins are flagged as late.</p>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label small">Curfew starts</label>
+                                    <input name="CurfewStart" type="time" class="form-control form-control-sm" value="@boardingSettings.CurfewStart" required />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Curfew ends</label>
+                                    <input name="CurfewEnd" type="time" class="form-control form-control-sm" value="@boardingSettings.CurfewEnd" required />
+                                </div>
+                            </div>
                             <button type="submit" class="btn btn-dhs-primary btn-sm">Save</button>
                         </form>
                     </div>

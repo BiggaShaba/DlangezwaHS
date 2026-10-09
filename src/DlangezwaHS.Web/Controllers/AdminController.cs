@@ -503,10 +503,10 @@ public class AdminController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveBoardingSettings(BoardingSettingsViewModel vm)
     {
-        var times = new[] { vm.BreakfastStart, vm.BreakfastServe, vm.LunchStart, vm.LunchServe, vm.DinnerStart, vm.DinnerServe };
+        var times = new[] { vm.BreakfastStart, vm.BreakfastServe, vm.LunchStart, vm.LunchServe, vm.DinnerStart, vm.DinnerServe, vm.CurfewStart, vm.CurfewEnd };
         if (times.Any(t => !TimeSpan.TryParse(t, out _)))
         {
-            TempData["Error"] = "Enter every kitchen shift time as HH:mm.";
+            TempData["Error"] = "Enter every kitchen shift and curfew time as HH:mm.";
             return RedirectToAction(nameof(Settings));
         }
         if (TimeSpan.Parse(vm.BreakfastStart) >= TimeSpan.Parse(vm.BreakfastServe)
@@ -514,6 +514,11 @@ public class AdminController : Controller
             || TimeSpan.Parse(vm.DinnerStart) >= TimeSpan.Parse(vm.DinnerServe))
         {
             TempData["Error"] = "Each kitchen shift must start before the meal is served.";
+            return RedirectToAction(nameof(Settings));
+        }
+        if (TimeSpan.Parse(vm.CurfewStart) == TimeSpan.Parse(vm.CurfewEnd))
+        {
+            TempData["Error"] = "Curfew must start and end at different times.";
             return RedirectToAction(nameof(Settings));
         }
 
@@ -533,6 +538,8 @@ public class AdminController : Controller
         settings.DinnerStart = vm.DinnerStart;
         settings.DinnerServe = vm.DinnerServe;
         settings.ServingMinutes = Math.Clamp(vm.ServingMinutes, 15, 240);
+        settings.CurfewStart = TimeSpan.Parse(vm.CurfewStart).ToString(@"hh\:mm");
+        settings.CurfewEnd = TimeSpan.Parse(vm.CurfewEnd).ToString(@"hh\:mm");
         await _db.SaveChangesAsync();
         TempData["Success"] = "Boarding settings saved.";
         return RedirectToAction(nameof(Settings));

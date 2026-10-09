@@ -89,7 +89,7 @@
             </div>
             @if (!Model.CurrentlyOut.Any())
             {
-                <div class="k-empty"><i class="bi bi-house-check"></i><strong>Everyone is checked in</strong><p>Learners appear here when they're scanned out on approved leave.</p></div>
+                <div class="k-empty"><i class="bi bi-house-check"></i><strong>Everyone is checked in</strong><p>Learners appear here when they're scanned out.</p></div>
             }
             <div id="outList" data-more-list data-more-initial="5" data-more-step="5">
                 @foreach (var r in Model.CurrentlyOut)

@@ -385,6 +385,23 @@ public class BoardingSettings
 
     public TimeSpan ServingDuration => TimeSpan.FromMinutes(ServingMinutes > 0 ? ServingMinutes : 90);
 
+    // Boarding curfew (school time). During curfew only learners with approved leave may
+    // check out; outside it learners may go out without leave but must be back by CurfewStart.
+    [StringLength(5)] public string CurfewStart { get; set; } = "19:00";
+    [StringLength(5)] public string CurfewEnd { get; set; } = "06:00";
+
+    public TimeSpan CurfewStartTime => TimeSpan.TryParse(CurfewStart, out var t) ? t : new TimeSpan(19, 0, 0);
+    public TimeSpan CurfewEndTime => TimeSpan.TryParse(CurfewEnd, out var t) ? t : new TimeSpan(6, 0, 0);
+
+    /// <summary>True when the given school time falls in the curfew (which may run past midnight).</summary>
+    public bool IsCurfew(DateTime schoolTime)
+    {
+        var t = schoolTime.TimeOfDay;
+        return CurfewStartTime <= CurfewEndTime
+            ? t >= CurfewStartTime && t < CurfewEndTime
+            : t >= CurfewStartTime || t < CurfewEndTime;
+    }
+
     public (string Start, string Serve) ShiftFor(MealType type) => type switch
     {
         MealType.Breakfast => (BreakfastStart, BreakfastServe),
